@@ -37,6 +37,7 @@ Return all elements that has key as its prefix.
 Removes an element from the radix, and returns it.
 
 Authorship and license
+----------------------
 
 Copyright (c) 2013, J. Salvador Arias <jsalarias@csnat.unt.edu.ar>
 All rights reserved.
