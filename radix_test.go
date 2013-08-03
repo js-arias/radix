@@ -11,13 +11,13 @@ func TestInsertion(t *testing.T) {
 	r.Insert("test", "test")
 	r.Insert("slow", "slow")
 	r.Insert("water", "water")
-	for d := r.desc; d != nil; d = d.sis {
+	for d := r.root.desc; d != nil; d = d.sis {
 		if v := d.value.(string); v != d.prefix {
 			t.Errorf("d.value = %s, want %s", v, d.prefix)
 		}
 	}
 	r.Insert("slower", "slower")
-	for d := r.desc; d != nil; d = d.sis {
+	for d := r.root.desc; d != nil; d = d.sis {
 		if d.prefix != "slow" {
 			continue
 		}
@@ -35,7 +35,7 @@ func TestInsertion(t *testing.T) {
 	r.Insert("team", "team")
 	r.Insert("tester", "tester")
 	var ok bool
-	for d := r.desc; d != nil; d = d.sis {
+	for d := r.root.desc; d != nil; d = d.sis {
 		if d.prefix == "te" {
 			if v, ok := d.value.(string); ok {
 				t.Errorf("d.value = %s, want nil", v)
@@ -66,7 +66,7 @@ func TestInsertion(t *testing.T) {
 	}
 	r.Insert("te", "te")
 	ok = false
-	for d := r.desc; d != nil; d = d.sis {
+	for d := r.root.desc; d != nil; d = d.sis {
 		if d.prefix == "te" {
 			v := d.value.(string)
 			if v != "te" {
@@ -228,11 +228,6 @@ func TestPrefix(t *testing.T) {
 	r.Insert("timor", "timor")
 
 	l := r.Prefix("t")
-
-	for e := l.Front(); e != nil; e = e.Next() {
-		println("value:", e.Value.(string))
-	}
-
 	if l.Len() != 5 {
 		t.Errorf("l.Len() = %d expecting 5", l.Len())
 	}

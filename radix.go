@@ -10,23 +10,39 @@ package radix
 import (
 	"container/list"
 	"errors"
+	"sync"
 )
 
-// Radix is a node of the radix tree.
+// Radix is a radix tree.
 type Radix struct {
+	root *radNode   // root of the radix tree
+	lock sync.Mutex // protect the radix
+}
+
+// a node of a radix tree
+type radNode struct {
 	prefix    string      // current prefix of the node
-	desc, sis *Radix      // neighbors of the node
+	desc, sis *radNode    // neighbors of the node
 	value     interface{} // stored value
 }
 
 // New returns a new, empty radix tree.
 func New() *Radix {
-	return &Radix{}
+	rad := &Radix{
+		root: &radNode{},
+	}
+	return rad
 }
 
-// Delete removes the value associated with a particular key and
-// returns it.
-func (r *Radix) Delete(key string) interface{} {
+// Delete removes the value associated with a particular key and returns it.
+func (rad *Radix) Delete(key string) interface{} {
+	rad.lock.Lock()
+	defer rad.lock.Unlock()
+	return rad.root.delete(key)
+}
+
+// implements delete
+func (r *radNode) delete(key string) interface{} {
 	if x, ok := r.lookup(key); ok {
 		val := x.value
 		// only assign a nil, therefore skip any modification
@@ -37,9 +53,16 @@ func (r *Radix) Delete(key string) interface{} {
 	return nil
 }
 
-// Insert put a value in the radix. It returns an error if
-// the given key is already in use.
-func (r *Radix) Insert(key string, value interface{}) error {
+// Insert put a value in the radix. It returns an error if the given key
+// is already in use.
+func (rad *Radix) Insert(key string, value interface{}) error {
+	rad.lock.Lock()
+	defer rad.lock.Unlock()
+	return rad.root.insert(key, value)
+}
+
+// implements insert
+func (r *radNode) insert(key string, value interface{}) error {
 	for d := r.desc; d != nil; d = d.sis {
 		comm := common(key, d.prefix)
 		if len(comm) == 0 {
@@ -53,7 +76,7 @@ func (r *Radix) Insert(key string, value interface{}) error {
 				}
 				return errors.New("key already in use")
 			}
-			n := &Radix{
+			n := &radNode{
 				prefix: d.prefix[len(comm):],
 				value:  d.value,
 			}
@@ -66,14 +89,14 @@ func (r *Radix) Insert(key string, value interface{}) error {
 			return nil
 		}
 		if len(comm) == len(d.prefix) {
-			return d.Insert(key[len(comm):], value)
+			return d.insert(key[len(comm):], value)
 		}
-		p := &Radix{
+		p := &radNode{
 			prefix: d.prefix[len(comm):],
 			value:  d.value,
 			desc:   d.desc,
 		}
-		n := &Radix{
+		n := &radNode{
 			prefix: key[len(comm):],
 			value:  value,
 		}
@@ -83,7 +106,7 @@ func (r *Radix) Insert(key string, value interface{}) error {
 		d.value = nil
 		return nil
 	}
-	n := &Radix{
+	n := &radNode{
 		prefix: key,
 		value:  value,
 		sis:    r.desc,
@@ -93,18 +116,21 @@ func (r *Radix) Insert(key string, value interface{}) error {
 }
 
 // Lookup searches for a particular string in the tree.
-func (r *Radix) Lookup(key string) interface{} {
-	if x, ok := r.lookup(key); ok {
+func (rad *Radix) Lookup(key string) interface{} {
+	rad.lock.Lock()
+	defer rad.lock.Unlock()
+	if x, ok := rad.root.lookup(key); ok {
 		return x.value
 	}
 	return nil
 }
 
-// Prefix returns a list of elements that share a given
-// prefix.
-func (r *Radix) Prefix(key string) *list.List {
+// Prefix returns a list of elements that share a given prefix.
+func (rad *Radix) Prefix(prefix string) *list.List {
+	rad.lock.Lock()
+	defer rad.lock.Unlock()
 	l := list.New()
-	n, _ := r.lookup(key)
+	n, _ := rad.root.lookup(prefix)
 	if n == nil {
 		return l
 	}
@@ -113,7 +139,7 @@ func (r *Radix) Prefix(key string) *list.List {
 }
 
 // add the content of a node and its descendants to a list
-func (r *Radix) addToList(l *list.List) {
+func (r *radNode) addToList(l *list.List) {
 	if r.value != nil {
 		l.PushBack(r.value)
 	}
@@ -122,8 +148,8 @@ func (r *Radix) addToList(l *list.List) {
 	}
 }
 
-// implementation of the lookup
-func (r *Radix) lookup(key string) (*Radix, bool) {
+// implementats lookup
+func (r *radNode) lookup(key string) (*radNode, bool) {
 	for d := r.desc; d != nil; d = d.sis {
 		comm := common(key, d.prefix)
 		if len(comm) == 0 {
