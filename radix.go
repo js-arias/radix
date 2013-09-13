@@ -79,9 +79,7 @@ func (r *radNode) insert(key string, value interface{}) error {
 			n := &radNode{
 				prefix: d.prefix[len(comm):],
 				value:  d.value,
-			}
-			if d.desc != nil {
-				n.sis = d.desc.sis
+				desc:   d.desc,
 			}
 			d.desc = n
 			d.prefix = comm
