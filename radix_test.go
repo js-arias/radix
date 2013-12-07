@@ -5,57 +5,58 @@
 package radix
 
 import "testing"
+import "encoding/json"
 
 func TestInsertion(t *testing.T) {
 	r := New()
 	r.Insert("test", "test")
 	r.Insert("slow", "slow")
 	r.Insert("water", "water")
-	for d := r.root.desc; d != nil; d = d.sis {
-		if v := d.value.(string); v != d.prefix {
-			t.Errorf("d.value = %s, want %s", v, d.prefix)
+	for _, d := range r.Root.Children {
+		if v := d.Value.(string); v != d.Prefix {
+			t.Errorf("d.Value = %s, want %s", v, d.Prefix)
 		}
 	}
 	r.Insert("slower", "slower")
-	for d := r.root.desc; d != nil; d = d.sis {
-		if d.prefix != "slow" {
+	for _, d := range r.Root.Children {
+		if d.Prefix != "slow" {
 			continue
 		}
-		if v := d.value.(string); v != "slow" {
-			t.Errorf("d.value = %s, want %s", v, d.prefix)
+		if v := d.Value.(string); v != "slow" {
+			t.Errorf("d.Value = %s, want %s", v, d.Prefix)
 		}
-		if d.desc.prefix == "er" {
-			if v := d.desc.value.(string); v != "slower" {
-				t.Errorf("d.desc.value = %s, want %s", v, "slower")
+		if d.Children[0].Prefix == "er" {
+			if v := d.Children[0].Value.(string); v != "slower" {
+				t.Errorf("d.Children.Value = %s, want %s", v, "slower")
 			}
 			break
 		}
-		t.Errorf("d.desc.prefix = %s, want %s", d.desc.prefix, "er")
+		t.Errorf("d.Children.prefix = %s, want %s", d.Children[0].Prefix, "er")
 	}
 	r.Insert("team", "team")
 	r.Insert("tester", "tester")
 	var ok bool
-	for d := r.root.desc; d != nil; d = d.sis {
-		if d.prefix == "te" {
-			if v, ok := d.value.(string); ok {
-				t.Errorf("d.value = %s, want nil", v)
+	for _, d := range r.Root.Children {
+		if d.Prefix == "te" {
+			if v, ok := d.Value.(string); ok {
+				t.Errorf("d.Value = %s, want nil", v)
 			}
 			ok = true
-			for n := d.desc; n != nil; n = n.sis {
-				switch v := n.value.(string); n.prefix {
+			for _, n := range d.Children {
+				switch v := n.Value.(string); n.Prefix {
 				case "am":
 					if v != "team" {
-						t.Errorf("n.value = %s, want %s", v, "team")
+						t.Errorf("n.Value = %s, want %s", v, "team")
 					}
 				case "st":
 					if v != "test" {
-						t.Errorf("n.value = %s, want %s", v, "test")
+						t.Errorf("n.Value = %s, want %s", v, "test")
 					}
-					if n.desc == nil {
-						t.Errorf("nil value unexpected in n.desc")
+					if n.Children == nil {
+						t.Errorf("nil Value unexpected in n.Children")
 					}
 				default:
-					t.Errorf("n.value = %s, want %s or %s", v, "team", "tester")
+					t.Errorf("n.Value = %s, want %s or %s", v, "team", "tester")
 				}
 			}
 			break
@@ -66,11 +67,11 @@ func TestInsertion(t *testing.T) {
 	}
 	r.Insert("te", "te")
 	ok = false
-	for d := r.root.desc; d != nil; d = d.sis {
-		if d.prefix == "te" {
-			v := d.value.(string)
+	for _, d := range r.Root.Children {
+		if d.Prefix == "te" {
+			v := d.Value.(string)
 			if v != "te" {
-				t.Errorf("d.value = %s, want %s", v, "te")
+				t.Errorf("d.Value = %s, want %s", v, "te")
 			}
 			ok = true
 			break
@@ -90,6 +91,54 @@ func TestInsertion(t *testing.T) {
 	}
 }
 
+func TestLookupByPrefixAndDelimiter(t *testing.T) {
+	r := New()
+	r.Insert("test", "")
+	r.Insert("slow", "")
+	r.Insert("water", "")
+	r.Insert("slower", "")
+	r.Insert("tester", "")
+	r.Insert("team", "")
+	r.Insert("toast", "")
+	r.Insert("te", "te")
+	r.Insert("test123/1", "")
+	r.Insert("test123/2", "")
+	r.Insert("test123//2", "")
+
+	l := r.LookupByPrefixAndDelimiter("t", "/", 100, 100)
+	if l.Len() != 6 {
+		t.Errorf("should got 5, but we got %d", l.Len())
+	}
+
+	for v := l.Front(); v != nil; v = v.Next() {
+		println(v.Value.(string))
+	}
+}
+
+func TestLookupByPrefixAndDelimiter_complex(t *testing.T) {
+	r := New()
+	r.Insert("te#st", "")
+	r.Insert("slow", "")
+	r.Insert("water", "")
+	r.Insert("slower", "")
+	r.Insert("tester", "")
+	r.Insert("team", "")
+	r.Insert("toast", "")
+	r.Insert("te", "te")
+	r.Insert("test123/1//a", "")
+	r.Insert("test123/2", "")
+	r.Insert("test123//2", "")
+
+	l := r.LookupByPrefixAndDelimiter("t", "#", 100, 100)
+	if l.Len() != 10 {
+		t.Errorf("should got 5, but we got %d", l.Len())
+	}
+
+	for v := l.Front(); v != nil; v = v.Next() {
+		println(v.Value.(string))
+	}
+}
+
 func TestLookup(t *testing.T) {
 	r := New()
 	r.Insert("test", "test")
@@ -100,6 +149,13 @@ func TestLookup(t *testing.T) {
 	r.Insert("team", "team")
 	r.Insert("toast", "toast")
 	r.Insert("te", "te")
+
+	buf, err := json.Marshal(r)
+	if err != nil {
+		t.Error(err)
+	}
+
+	println(string(buf))
 
 	if v := r.Lookup("tester"); v != nil {
 		if s, ok := v.(string); !ok {
@@ -147,6 +203,18 @@ func TestLookup(t *testing.T) {
 		}
 	} else {
 		t.Errorf("expecting %s found nil", "tester")
+	}
+
+	if v := r.Lookup("te"); v != nil {
+		if s, ok := v.(string); !ok {
+			t.Errorf("expecting %s found nil", "te")
+		} else {
+			if s != "te" {
+				t.Errorf("expecting %s found %s", "te", s)
+			}
+		}
+	} else {
+		t.Errorf("expecting %s found nil", "te")
 	}
 }
 
