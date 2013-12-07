@@ -10,106 +10,108 @@ package radix
 import (
 	"container/list"
 	"errors"
+	"strings"
 	"sync"
 )
 
 // Radix is a radix tree.
 type Radix struct {
-	root *radNode   // root of the radix tree
+	Root *radNode   // Root of the radix tree
 	lock sync.Mutex // protect the radix
 }
 
 // a node of a radix tree
 type radNode struct {
-	prefix    string      // current prefix of the node
-	desc, sis *radNode    // neighbors of the node
-	value     interface{} // stored value
+	Prefix   string      // current prefix of the node
+	Children []*radNode  // neighbors of the node
+	Value    interface{} // stored Value
 }
 
 // New returns a new, empty radix tree.
 func New() *Radix {
 	rad := &Radix{
-		root: &radNode{},
+		Root: &radNode{},
 	}
 	return rad
 }
 
-// Delete removes the value associated with a particular key and returns it.
+// Delete removes the Value associated with a particular key and returns it.
 func (rad *Radix) Delete(key string) interface{} {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
-	return rad.root.delete(key)
+	return rad.Root.delete(key)
 }
 
 // implements delete
 func (r *radNode) delete(key string) interface{} {
 	if x, ok := r.lookup(key); ok {
-		val := x.value
+		val := x.Value
 		// only assign a nil, therefore skip any modification
 		// of the radix topology
-		x.value = nil
+		x.Value = nil
 		return val
 	}
 	return nil
 }
 
-// Insert put a value in the radix. It returns an error if the given key
+// Insert put a Value in the radix. It returns an error if the given key
 // is already in use.
-func (rad *Radix) Insert(key string, value interface{}) error {
+func (rad *Radix) Insert(key string, Value interface{}) error {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
-	return rad.root.insert(key, value)
+	return rad.Root.insert(key, Value)
 }
 
 // implements insert
-func (r *radNode) insert(key string, value interface{}) error {
-	for d := r.desc; d != nil; d = d.sis {
-		comm := common(key, d.prefix)
+func (r *radNode) insert(key string, Value interface{}) error {
+	for _, d := range r.Children {
+		comm := common(key, d.Prefix)
 		if len(comm) == 0 {
 			continue
 		}
 		if len(comm) == len(key) {
-			if len(comm) == len(d.prefix) {
-				if d.value == nil {
-					d.value = value
+			if len(comm) == len(d.Prefix) {
+				if d.Value == nil {
+					d.Value = Value
 					return nil
 				}
 				return errors.New("key already in use")
 			}
 			n := &radNode{
-				prefix: d.prefix[len(comm):],
-				value:  d.value,
-				desc:   d.desc,
+				Prefix:   d.Prefix[len(comm):],
+				Value:    d.Value,
+				Children: d.Children,
 			}
-			d.desc = n
-			d.prefix = comm
-			d.value = value
+			d.Children = make([]*radNode, 0)
+			d.Children = append(d.Children, n)
+			d.Prefix = comm
+			d.Value = Value
 			return nil
 		}
-		if len(comm) == len(d.prefix) {
-			return d.insert(key[len(comm):], value)
+		if len(comm) == len(d.Prefix) {
+			return d.insert(key[len(comm):], Value)
 		}
 		p := &radNode{
-			prefix: d.prefix[len(comm):],
-			value:  d.value,
-			desc:   d.desc,
+			Prefix:   d.Prefix[len(comm):],
+			Value:    d.Value,
+			Children: d.Children,
 		}
 		n := &radNode{
-			prefix: key[len(comm):],
-			value:  value,
+			Prefix: key[len(comm):],
+			Value:  Value,
 		}
-		d.prefix = comm
-		p.sis = n
-		d.desc = p
-		d.value = nil
+		d.Prefix = comm
+		d.Children = make([]*radNode, 0)
+		d.Children = append(d.Children, p)
+		d.Children = append(d.Children, n)
+		d.Value = nil
 		return nil
 	}
 	n := &radNode{
-		prefix: key,
-		value:  value,
-		sis:    r.desc,
+		Prefix: key,
+		Value:  Value,
 	}
-	r.desc = n
+	r.Children = append(r.Children, n)
 	return nil
 }
 
@@ -117,10 +119,24 @@ func (r *radNode) insert(key string, value interface{}) error {
 func (rad *Radix) Lookup(key string) interface{} {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
-	if x, ok := rad.root.lookup(key); ok {
-		return x.value
+	if x, ok := rad.Root.lookup(key); ok {
+		return x.Value
 	}
 	return nil
+}
+
+//todo: support marker & remove duplicate, see TestLookupByPrefixAndDelimiter_complex
+func (rad *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, count int, limitLevel int) *list.List {
+	rad.lock.Lock()
+	defer rad.lock.Unlock()
+
+	n, _ := rad.Root.lookup(prefix)
+	if n == nil {
+		return list.New()
+	}
+	println(n.Prefix, "---", n.Value)
+
+	return n.getFirstByDelimiter(delimiter, count, limitLevel)
 }
 
 // Prefix returns a list of elements that share a given prefix.
@@ -128,7 +144,7 @@ func (rad *Radix) Prefix(prefix string) *list.List {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
 	l := list.New()
-	n, _ := rad.root.lookup(prefix)
+	n, _ := rad.Root.lookup(prefix)
 	if n == nil {
 		return l
 	}
@@ -136,26 +152,66 @@ func (rad *Radix) Prefix(prefix string) *list.List {
 	return l
 }
 
-// add the content of a node and its descendants to a list
+// add the content of a node and its Childrenendants to a list
 func (r *radNode) addToList(l *list.List) {
-	if r.value != nil {
-		l.PushBack(r.value)
+	if r.Value != nil {
+		l.PushBack(r.Value)
 	}
-	for d := r.desc; d != nil; d = d.sis {
+	for _, d := range r.Children {
 		d.addToList(l)
 	}
 }
 
+func (r *radNode) getFirstByDelimiter(delimiter string, count int, limitLevel int) *list.List {
+	l := list.New()
+	for _, d := range r.Children {
+		//leaf or prefix include delimiter
+		println("check ", d.Prefix, "--")
+		if len(d.Children) == 0 { //leaf node
+			if pos := strings.Index(d.Prefix, delimiter); pos >= 0 {
+				println("delimiter ", delimiter, " found")
+				l.PushBack(d.Prefix[:pos])
+				//no need to search sub tree
+				continue
+			}
+
+			l.PushBack(d.Prefix)
+			continue
+		}
+
+		println("check delimiter ", d.Prefix, delimiter)
+		if pos := strings.Index(d.Prefix, delimiter); pos >= 0 {
+			println("delimiter ", delimiter, " found")
+			l.PushBack(d.Prefix[:pos])
+			//no need to search sub tree
+			continue
+		} else {
+			l.PushBack(d.Prefix)
+			ll := d.getFirstByDelimiter(delimiter, count, limitLevel)
+			for e := ll.Front(); e != nil; e = e.Next() {
+				l.PushBack(e.Value.(string))
+			}
+		}
+	}
+
+	moreCompleteList := list.New()
+	for e := l.Front(); e != nil; e = e.Next() {
+		moreCompleteList.PushBack(r.Prefix + e.Value.(string))
+	}
+
+	return moreCompleteList
+}
+
 // implementats lookup
 func (r *radNode) lookup(key string) (*radNode, bool) {
-	for d := r.desc; d != nil; d = d.sis {
-		comm := common(key, d.prefix)
+	for _, d := range r.Children {
+		comm := common(key, d.Prefix)
 		if len(comm) == 0 {
 			continue
 		}
 		// The key is found
 		if len(comm) == len(key) {
-			if len(comm) == len(d.prefix) {
+			if len(comm) == len(d.Prefix) {
 				return d, true
 			}
 			return d, false
