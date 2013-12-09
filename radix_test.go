@@ -109,13 +109,12 @@ func TestLookupByPrefixAndDelimiter(t *testing.T) {
 	r.Insert("test123/2", "")
 	r.Insert("test123//2", "")
 
-	l := r.LookupByPrefixAndDelimiter("t", "/", 100, 100)
+	l := r.LookupByPrefixAndDelimiter("t", "/", 100, 100, "")
 	if l.Len() != 6 {
 		t.Errorf("should got 5, but we got %d", l.Len())
-	}
-
-	for v := l.Front(); v != nil; v = v.Next() {
-		println(v.Value.(string))
+		for v := l.Front(); v != nil; v = v.Next() {
+			println(v.Value.(string))
+		}
 	}
 }
 
@@ -133,13 +132,12 @@ func TestLookupByPrefixAndDelimiter_complex(t *testing.T) {
 	r.Insert("test123/2", "")
 	r.Insert("test123//2", "")
 
-	l := r.LookupByPrefixAndDelimiter("t", "#", 100, 100)
-	if l.Len() != 10 {
-		t.Errorf("should got 5, but we got %d", l.Len())
-	}
-
-	for v := l.Front(); v != nil; v = v.Next() {
-		println(v.Value.(string))
+	l := r.LookupByPrefixAndDelimiter("t", "#", 100, 100, "")
+	if l.Len() != 8 {
+		t.Errorf("should got 8, but we got %d", l.Len())
+		for v := l.Front(); v != nil; v = v.Next() {
+			println(v.Value.(string))
+		}
 	}
 }
 
@@ -157,13 +155,48 @@ func TestLookupByPrefixAndDelimiter_limit(t *testing.T) {
 	r.Insert("test123/2", "")
 	r.Insert("test123//2", "")
 
-	l := r.LookupByPrefixAndDelimiter("t", "/", 2, 100)
+	l := r.LookupByPrefixAndDelimiter("t", "/", 2, 100, "")
 	if l.Len() != 2 {
 		t.Errorf("should got 2, but we got %d", l.Len())
+		for v := l.Front(); v != nil; v = v.Next() {
+			println(v.Value.(string))
+		}
+	}
+}
+
+func TestLookupByPrefixAndDelimiter_limit_marker(t *testing.T) {
+	r := New()
+	r.Insert("test", "")
+	r.Insert("slow", "")
+	r.Insert("water", "")
+	r.Insert("slower", "")
+	r.Insert("tester", "")
+	r.Insert("team", "")
+	r.Insert("toast", "")
+	r.Insert("te", "te")
+	r.Insert("test123/1", "")
+	r.Insert("test123/2", "")
+	r.Insert("test123//2", "")
+
+	println("---------------------------")
+	l := r.LookupByPrefixAndDelimiter("t", "/", 5, 100, "test")
+	if l.Len() != 3 {
+		t.Errorf("should got 3, but we got %d", l.Len())
+		println("================================")
+		for v := l.Front(); v != nil; v = v.Next() {
+			println(v.Value.(string))
+		}
+		println("---------------------------")
 	}
 
-	for v := l.Front(); v != nil; v = v.Next() {
-		println(v.Value.(string))
+	l = r.LookupByPrefixAndDelimiter("t", "/", 5, 100, "te")
+	if l.Len() != 5 {
+		t.Errorf("should got 5, but we got %d", l.Len())
+		println("================================")
+		for v := l.Front(); v != nil; v = v.Next() {
+			println(v.Value.(string))
+		}
+		println("---------------------------")
 	}
 }
 
@@ -176,22 +209,34 @@ func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 	}
 
 	start := time.Now()
-	l := r.LookupByPrefixAndDelimiter("2", "/", 100, 6)
+	l := r.LookupByPrefixAndDelimiter("2", "/", 100, 6, "")
 	if l.Len() != 1 {
 		t.Errorf("should got 1, but we got %d", l.Len())
 	}
-	println("lookup using:", time.Since(start).Nanoseconds())
+	println("lookup using:", time.Since(start).Nanoseconds(), " ns")
 
 	start = time.Now()
 	_, err := json.Marshal(r)
 	if err != nil {
 		t.Fatal(err)
+		for v := l.Front(); v != nil; v = v.Next() {
+			println(v.Value.(string))
+		}
 	}
-	println("marshal using:", time.Since(start).Nanoseconds()/1000000000)
+	println("marshal using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+
+	start = time.Now()
+	l = r.LookupByPrefixAndDelimiter("2", "#", 100000, 6, "")
+	if l.Len() != 100000 {
+		t.Errorf("should got 100000, but we got %d", l.Len())
+	}
 
 	for v := l.Front(); v != nil; v = v.Next() {
 		println(v.Value.(string))
 	}
+
+	println("bad lookup:", time.Since(start).Nanoseconds()/1000000000, " sec")
+
 }
 
 func TestLookup(t *testing.T) {

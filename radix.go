@@ -127,19 +127,21 @@ func (rad *Radix) Lookup(key string) interface{} {
 }
 
 //todo: support marker & remove duplicate, see TestLookupByPrefixAndDelimiter_complex
-func (rad *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, limitCount int32, limitLevel int) *list.List {
+func (rad *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, limitCount int32, limitLevel int, marker string) *list.List {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
 
-	n, _ := rad.Root.lookup(prefix)
-	if n == nil {
+	println("limitCount", limitCount)
+
+	node, _ := rad.Root.lookup(prefix)
+	if node == nil {
 		return list.New()
 	}
-	// println(n.Prefix, "---", n.Value)
+	// println(node.Prefix, "---", node.Value)
 
 	var currentCount int32
 
-	return n.getFirstByDelimiter(delimiter, limitCount, limitLevel, &currentCount)
+	return node.getFirstByDelimiter(marker, delimiter, limitCount, limitLevel, &currentCount)
 }
 
 // Prefix returns a list of elements that share a given prefix.
@@ -165,74 +167,92 @@ func (r *radNode) addToList(l *list.List) {
 	}
 }
 
-func (r *radNode) incAndCheckFull(limitCount int32, currentCount *int32) bool {
-	if atomic.AddInt32(currentCount, 1) < limitCount {
-		return false
+//return: false if full
+func save(l *list.List, str string, marker string, value interface{}, limitCount int32, currentCount *int32, inc bool) bool {
+	if inc {
+		if atomic.LoadInt32(currentCount) >= limitCount {
+			println("full")
+			return false
+		}
+	}
+
+	if str > marker && value != nil {
+		// println("add ", str)
+		l.PushBack(str)
+		if inc {
+			atomic.AddInt32(currentCount, 1)
+		}
 	}
 
 	return true
 }
 
-func (r *radNode) getFirstByDelimiter(delimiter string, limitCount int32, limitLevel int, currentCount *int32) *list.List {
+func (r *radNode) getFirstByDelimiter(marker string, delimiter string, limitCount int32, limitLevel int, currentCount *int32) *list.List {
 	l := list.New()
-	//println("prefix: ", r.Prefix)
+	// println("===> prefix: ", r.Prefix, "marker ", marker, "level: ", limitLevel)
+	// defer func() {
+	// 	println("exit level ", limitLevel)
+	// }()
 
 	//search root first
 	if pos := strings.Index(r.Prefix, delimiter); pos >= 0 {
-		println("delimiter ", delimiter, " found")
-		l.PushBack(r.Prefix[:pos])
+		// println("delimiter ", delimiter, " found")
+		save(l, r.Prefix[:pos+1], marker, true, limitCount, currentCount, true)
 		return l
 	}
+
+	n := len(common(marker, r.Prefix))
+	marker = marker[n:]
 
 L:
 	for _, d := range r.Children {
 		//leaf or prefix include delimiter
-		// println("check ", d.Prefix, "--")
+		// println("check ", d.Prefix, "marker ", marker)
+
 		if len(d.Children) == 0 { //leaf node
+			// println("leaf: ", d.Prefix)
 			if pos := strings.Index(d.Prefix, delimiter); pos >= 0 {
 				// println("delimiter ", delimiter, " found")
-				l.PushBack(d.Prefix[:pos])
-				if r.incAndCheckFull(limitCount, currentCount) {
+				if !save(l, d.Prefix[:pos+1], marker, true, limitCount, currentCount, true) {
 					break L
 				}
+
 				//no need to search sub tree
 				continue
 			}
 
-			l.PushBack(d.Prefix)
-			if r.incAndCheckFull(limitCount, currentCount) {
+			if !save(l, d.Prefix, marker, true, limitCount, currentCount, true) {
 				break L
 			}
+
 			continue
 		}
 
 		// println("check delimiter ", d.Prefix, delimiter)
 		if pos := strings.Index(d.Prefix, delimiter); pos >= 0 {
 			// println("delimiter ", delimiter, " found")
-			l.PushBack(d.Prefix[:pos])
-			if r.incAndCheckFull(limitCount, currentCount) {
-				break L
-			}
-			//no need to search sub tree
-			continue
-		} else {
-			l.PushBack(d.Prefix)
-			if r.incAndCheckFull(limitCount, currentCount) {
+			if !save(l, d.Prefix[:pos+1], marker, true, limitCount, currentCount, true) {
 				break L
 			}
 
-			ll := d.getFirstByDelimiter(delimiter, limitCount, limitLevel, currentCount)
-			for e := ll.Front(); e != nil; e = e.Next() {
-				l.PushBack(e.Value.(string))
-				if r.incAndCheckFull(limitCount, currentCount) {
-					break L
-				}
+			//no need to search sub tree
+			continue
+		} else {
+			if !save(l, d.Prefix, marker, d.Value, limitCount, currentCount, true) {
+				break L
+			}
+
+			n := len(common(marker, r.Prefix))
+			ll := d.getFirstByDelimiter(marker[n:], delimiter, limitCount, limitLevel+1, currentCount)
+			for e := ll.Front(); e != nil; e = e.Next() { //no need to check full, already checked by child function
+				save(l, e.Value.(string), marker, true, limitCount, currentCount, false)
 			}
 		}
 	}
 
 	moreCompleteList := list.New()
 	for e := l.Front(); e != nil; e = e.Next() {
+		// println("level:", limitLevel, "moreCompleteList", r.Prefix+e.Value.(string))
 		moreCompleteList.PushBack(r.Prefix + e.Value.(string))
 	}
 
