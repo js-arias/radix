@@ -200,17 +200,18 @@ func TestLookupByPrefixAndDelimiter_limit_marker(t *testing.T) {
 	}
 }
 
-const COUNT = 200
+const COUNT = 1000000
 
 func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 	r := New()
 
+	start := time.Now()
 	for i := 0; i < COUNT; i++ {
 		key := fmt.Sprintf("2013/%d", i)
 		r.Insert(key, "")
 	}
+	println("Insert using:", time.Since(start).Nanoseconds()/1000000000, " sec")
 
-	start := time.Now()
 	l := r.LookupByPrefixAndDelimiter("2", "/", 100, 10, "")
 	if l.Len() != 1 {
 		t.Errorf("should got 1, but we got %d", l.Len())
