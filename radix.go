@@ -12,6 +12,7 @@ import (
 	"errors"
 	"strings"
 	"sync"
+	"sync/atomic"
 )
 
 // Radix is a radix tree.
@@ -126,7 +127,7 @@ func (rad *Radix) Lookup(key string) interface{} {
 }
 
 //todo: support marker & remove duplicate, see TestLookupByPrefixAndDelimiter_complex
-func (rad *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, count int, limitLevel int) *list.List {
+func (rad *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, limitCount int32, limitLevel int) *list.List {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
 
@@ -134,9 +135,11 @@ func (rad *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, co
 	if n == nil {
 		return list.New()
 	}
-	println(n.Prefix, "---", n.Value)
+	// println(n.Prefix, "---", n.Value)
 
-	return n.getFirstByDelimiter(delimiter, count, limitLevel)
+	var currentCount int32
+
+	return n.getFirstByDelimiter(delimiter, limitCount, limitLevel, &currentCount)
 }
 
 // Prefix returns a list of elements that share a given prefix.
@@ -162,34 +165,68 @@ func (r *radNode) addToList(l *list.List) {
 	}
 }
 
-func (r *radNode) getFirstByDelimiter(delimiter string, count int, limitLevel int) *list.List {
+func (r *radNode) incAndCheckFull(limitCount int32, currentCount *int32) bool {
+	if atomic.AddInt32(currentCount, 1) < limitCount {
+		return false
+	}
+
+	return true
+}
+
+func (r *radNode) getFirstByDelimiter(delimiter string, limitCount int32, limitLevel int, currentCount *int32) *list.List {
 	l := list.New()
+	//println("prefix: ", r.Prefix)
+
+	//search root first
+	if pos := strings.Index(r.Prefix, delimiter); pos >= 0 {
+		println("delimiter ", delimiter, " found")
+		l.PushBack(r.Prefix[:pos])
+		return l
+	}
+
+L:
 	for _, d := range r.Children {
 		//leaf or prefix include delimiter
-		println("check ", d.Prefix, "--")
+		// println("check ", d.Prefix, "--")
 		if len(d.Children) == 0 { //leaf node
 			if pos := strings.Index(d.Prefix, delimiter); pos >= 0 {
-				println("delimiter ", delimiter, " found")
+				// println("delimiter ", delimiter, " found")
 				l.PushBack(d.Prefix[:pos])
+				if r.incAndCheckFull(limitCount, currentCount) {
+					break L
+				}
 				//no need to search sub tree
 				continue
 			}
 
 			l.PushBack(d.Prefix)
+			if r.incAndCheckFull(limitCount, currentCount) {
+				break L
+			}
 			continue
 		}
 
-		println("check delimiter ", d.Prefix, delimiter)
+		// println("check delimiter ", d.Prefix, delimiter)
 		if pos := strings.Index(d.Prefix, delimiter); pos >= 0 {
-			println("delimiter ", delimiter, " found")
+			// println("delimiter ", delimiter, " found")
 			l.PushBack(d.Prefix[:pos])
+			if r.incAndCheckFull(limitCount, currentCount) {
+				break L
+			}
 			//no need to search sub tree
 			continue
 		} else {
 			l.PushBack(d.Prefix)
-			ll := d.getFirstByDelimiter(delimiter, count, limitLevel)
+			if r.incAndCheckFull(limitCount, currentCount) {
+				break L
+			}
+
+			ll := d.getFirstByDelimiter(delimiter, limitCount, limitLevel, currentCount)
 			for e := ll.Front(); e != nil; e = e.Next() {
 				l.PushBack(e.Value.(string))
+				if r.incAndCheckFull(limitCount, currentCount) {
+					break L
+				}
 			}
 		}
 	}

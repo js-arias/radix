@@ -6,6 +6,10 @@ package radix
 
 import "testing"
 import "encoding/json"
+import (
+	"fmt"
+	"time"
+)
 
 func TestInsertion(t *testing.T) {
 	r := New()
@@ -133,6 +137,57 @@ func TestLookupByPrefixAndDelimiter_complex(t *testing.T) {
 	if l.Len() != 10 {
 		t.Errorf("should got 5, but we got %d", l.Len())
 	}
+
+	for v := l.Front(); v != nil; v = v.Next() {
+		println(v.Value.(string))
+	}
+}
+
+func TestLookupByPrefixAndDelimiter_limit(t *testing.T) {
+	r := New()
+	r.Insert("test", "")
+	r.Insert("slow", "")
+	r.Insert("water", "")
+	r.Insert("slower", "")
+	r.Insert("tester", "")
+	r.Insert("team", "")
+	r.Insert("toast", "")
+	r.Insert("te", "te")
+	r.Insert("test123/1", "")
+	r.Insert("test123/2", "")
+	r.Insert("test123//2", "")
+
+	l := r.LookupByPrefixAndDelimiter("t", "/", 2, 100)
+	if l.Len() != 2 {
+		t.Errorf("should got 2, but we got %d", l.Len())
+	}
+
+	for v := l.Front(); v != nil; v = v.Next() {
+		println(v.Value.(string))
+	}
+}
+
+func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
+	r := New()
+
+	for i := 0; i < 10000000; i++ {
+		key := fmt.Sprintf("2013/%d", i)
+		r.Insert(key, "")
+	}
+
+	start := time.Now()
+	l := r.LookupByPrefixAndDelimiter("2", "/", 100, 6)
+	if l.Len() != 1 {
+		t.Errorf("should got 1, but we got %d", l.Len())
+	}
+	println("lookup using:", time.Since(start).Nanoseconds())
+
+	start = time.Now()
+	_, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	println("marshal using:", time.Since(start).Nanoseconds()/1000000000)
 
 	for v := l.Front(); v != nil; v = v.Next() {
 		println(v.Value.(string))
