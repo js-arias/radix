@@ -200,16 +200,18 @@ func TestLookupByPrefixAndDelimiter_limit_marker(t *testing.T) {
 	}
 }
 
+const COUNT = 200
+
 func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 	r := New()
 
-	for i := 0; i < 10000000; i++ {
+	for i := 0; i < COUNT; i++ {
 		key := fmt.Sprintf("2013/%d", i)
 		r.Insert(key, "")
 	}
 
 	start := time.Now()
-	l := r.LookupByPrefixAndDelimiter("2", "/", 100, 6, "")
+	l := r.LookupByPrefixAndDelimiter("2", "/", 100, 10, "")
 	if l.Len() != 1 {
 		t.Errorf("should got 1, but we got %d", l.Len())
 	}
@@ -226,13 +228,12 @@ func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 	println("marshal using:", time.Since(start).Nanoseconds()/1000000000, " sec")
 
 	start = time.Now()
-	l = r.LookupByPrefixAndDelimiter("2", "#", 100000, 6, "")
-	if l.Len() != 100000 {
-		t.Errorf("should got 100000, but we got %d", l.Len())
-	}
-
-	for v := l.Front(); v != nil; v = v.Next() {
-		println(v.Value.(string))
+	l = r.LookupByPrefixAndDelimiter("2", "#", COUNT/10, 10, "2013/1")
+	if l.Len() != COUNT/10 {
+		t.Errorf("should got %d, but we got %d", COUNT/10, l.Len())
+		for v := l.Front(); v != nil; v = v.Next() {
+			println(v.Value.(string))
+		}
 	}
 
 	println("bad lookup:", time.Since(start).Nanoseconds()/1000000000, " sec")
