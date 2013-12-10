@@ -23,9 +23,9 @@ type Radix struct {
 
 // a node of a radix tree
 type radNode struct {
-	Prefix   string      // current prefix of the node
-	Children []*radNode  // neighbors of the node
-	Value    interface{} // stored Value
+	Prefix   string      `json:"p,omitempty"` // current prefix of the node
+	Children []*radNode  `json:"c,omitempty"` // neighbors of the node
+	Value    interface{} `json:"v,omitempty"` // stored Value
 }
 
 // New returns a new, empty radix tree.
@@ -40,6 +40,7 @@ func New() *Radix {
 func (rad *Radix) Delete(key string) interface{} {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
+
 	return rad.Root.delete(key)
 }
 
@@ -60,6 +61,7 @@ func (r *radNode) delete(key string) interface{} {
 func (rad *Radix) Insert(key string, Value interface{}) error {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
+
 	return rad.Root.insert(key, Value)
 }
 
@@ -70,6 +72,7 @@ func (r *radNode) insert(key string, Value interface{}) error {
 		if len(comm) == 0 {
 			continue
 		}
+
 		if len(comm) == len(key) {
 			if len(comm) == len(d.Prefix) {
 				if d.Value == nil {
@@ -78,20 +81,23 @@ func (r *radNode) insert(key string, Value interface{}) error {
 				}
 				return errors.New("key already in use")
 			}
+
 			n := &radNode{
 				Prefix:   d.Prefix[len(comm):],
 				Value:    d.Value,
 				Children: d.Children,
 			}
-			d.Children = make([]*radNode, 0)
-			d.Children = append(d.Children, n)
+			d.Children = make([]*radNode, 1, 1)
+			d.Children[0] = n
 			d.Prefix = comm
 			d.Value = Value
 			return nil
 		}
+
 		if len(comm) == len(d.Prefix) {
 			return d.insert(key[len(comm):], Value)
 		}
+
 		p := &radNode{
 			Prefix:   d.Prefix[len(comm):],
 			Value:    d.Value,
@@ -102,12 +108,13 @@ func (r *radNode) insert(key string, Value interface{}) error {
 			Value:  Value,
 		}
 		d.Prefix = comm
-		d.Children = make([]*radNode, 0)
-		d.Children = append(d.Children, p)
-		d.Children = append(d.Children, n)
+		d.Children = make([]*radNode, 2, 2)
+		d.Children[0] = p
+		d.Children[1] = n
 		d.Value = nil
 		return nil
 	}
+
 	n := &radNode{
 		Prefix: key,
 		Value:  Value,
@@ -120,6 +127,7 @@ func (r *radNode) insert(key string, Value interface{}) error {
 func (rad *Radix) Lookup(key string) interface{} {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
+
 	if x, ok := rad.Root.lookup(key); ok {
 		return x.Value
 	}
@@ -148,6 +156,7 @@ func (rad *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, li
 func (rad *Radix) Prefix(prefix string) *list.List {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
+
 	l := list.New()
 	n, _ := rad.Root.lookup(prefix)
 	if n == nil {
@@ -230,7 +239,7 @@ L:
 
 		// println("check delimiter ", d.Prefix, delimiter)
 		if pos := strings.Index(d.Prefix, delimiter); pos >= 0 {
-			// println("delimiter ", delimiter, " found")
+			println("delimiter ", delimiter, " found")
 			if !save(l, d.Prefix[:pos+1], marker, true, limitCount, currentCount, true) {
 				break L
 			}

@@ -4,10 +4,12 @@
 
 package radix
 
-import "testing"
-import "encoding/json"
 import (
+	"bytes"
+	"encoding/gob"
+	"encoding/json"
 	"fmt"
+	"testing"
 	"time"
 )
 
@@ -200,7 +202,7 @@ func TestLookupByPrefixAndDelimiter_limit_marker(t *testing.T) {
 	}
 }
 
-const COUNT = 1000000
+const COUNT = 10000000
 
 func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 	r := New()
@@ -212,11 +214,12 @@ func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 	}
 	println("Insert using:", time.Since(start).Nanoseconds()/1000000000, " sec")
 
+	start = time.Now()
 	l := r.LookupByPrefixAndDelimiter("2", "/", 100, 10, "")
 	if l.Len() != 1 {
 		t.Errorf("should got 1, but we got %d", l.Len())
 	}
-	println("lookup using:", time.Since(start).Nanoseconds(), " ns")
+	println("lookup using:", time.Since(start).Nanoseconds()/1000000000, " sec")
 
 	start = time.Now()
 	_, err := json.Marshal(r)
@@ -226,7 +229,18 @@ func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 			println(v.Value.(string))
 		}
 	}
-	println("marshal using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+	println("json marshal using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+
+	start = time.Now()
+	var buffer bytes.Buffer
+	err = gob.NewEncoder(&buffer).Encode(r)
+	if err != nil {
+		t.Fatal(err)
+		for v := l.Front(); v != nil; v = v.Next() {
+			println(v.Value.(string))
+		}
+	}
+	println("gob marshal using:", time.Since(start).Nanoseconds()/1000000000, " sec")
 
 	start = time.Now()
 	l = r.LookupByPrefixAndDelimiter("2", "#", COUNT/10, 10, "2013/1")
@@ -238,7 +252,6 @@ func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 	}
 
 	println("bad lookup:", time.Since(start).Nanoseconds()/1000000000, " sec")
-
 }
 
 func TestLookup(t *testing.T) {
