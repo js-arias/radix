@@ -100,18 +100,43 @@ func (rad *Radix) Delete(key string) interface{} {
 // implements delete
 // todo: need to remove it if this is leaf node
 func (r *radNode) delete(key string) interface{} {
-	if x, ok := r.lookup(key); ok {
+	if x, father, i, ok := r.lookup(key); ok {
 		val := x.Value
 		// only assign a nil, therefore skip any modification
 		// of the radix topology
-		x.Value = nil
+
+		//seq := x.Seq
+
+		log.Println("delete", key, "father", father)
+
+		if len(x.Children) > 0 {
+			x.Value = nil
+			x.persistentNode(*x)
+			return val
+		}
+
+		//x is leaf node
+		if len(father.Children) > 1 {
+			father.Children = append(father.Children[:i], father.Children[:i]...)
+			father.persistentNode(*father)
+			log.Println("delete", key, "father", father)
+		} else if len(father.Children) == 1 {
+			father.Children = nil
+			father.persistentNode(*father)
+			//todo:remove from leveldb
+		} else {
+			panic("never happend")
+		}
+
 		return val
 	}
+
 	return nil
 }
 
 // Insert put a Value in the radix. It returns an error if the given key
 // is already in use.
+//todo: using transaction(batch write)
 func (rad *Radix) Insert(key string, Value interface{}) error {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
@@ -278,7 +303,7 @@ func (rad *Radix) Lookup(key string) interface{} {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
 
-	if x, ok := rad.Root.lookup(key); ok {
+	if x, _, _, ok := rad.Root.lookup(key); ok {
 		return x.Value
 	}
 	return nil
@@ -291,7 +316,7 @@ func (rad *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, li
 
 	println("limitCount", limitCount)
 
-	node, _ := rad.Root.lookup(prefix)
+	node, _, _, _ := rad.Root.lookup(prefix)
 	if node == nil {
 		return list.New()
 	}
@@ -308,7 +333,7 @@ func (rad *Radix) Prefix(prefix string) *list.List {
 	defer rad.lock.Unlock()
 
 	l := list.New()
-	n, _ := rad.Root.lookup(prefix)
+	n, _, _, _ := rad.Root.lookup(prefix)
 	if n == nil {
 		return l
 	}
@@ -426,13 +451,13 @@ L:
 	return moreCompleteList
 }
 
-// implementats lookup
-func (r *radNode) lookup(key string) (*radNode, bool) {
+// implementats lookup: node, father, exist, index
+func (r *radNode) lookup(key string) (*radNode, *radNode, int, bool) {
 	if r.InDisk {
 		r.getChildrenByNode(r)
 	}
 
-	for _, d := range r.Children {
+	for i, d := range r.Children {
 		if d.InDisk {
 			d.getChildrenByNode(d)
 			log.Printf("get %+v", d)
@@ -445,13 +470,13 @@ func (r *radNode) lookup(key string) (*radNode, bool) {
 		// The key is found
 		if len(comm) == len(key) {
 			if len(comm) == len(d.Prefix) {
-				return d, true
+				return d, r, i, true
 			}
-			return d, false
+			return d, nil, i, false
 		}
 		return d.lookup(key[len(comm):])
 	}
-	return nil, false
+	return nil, nil, 0, false
 }
 
 // return the common string

@@ -212,25 +212,27 @@ func TestLookupByPrefixAndDelimiter_limit_marker(t *testing.T) {
 	}
 }
 
-const COUNT = 100000
+const COUNT = 1000
 
 func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 	r := New(".")
-	defer r.Destory()
 
 	start := time.Now()
 	for i := 0; i < COUNT; i++ {
 		key := fmt.Sprintf("2013/%d", i)
 		r.Insert(key, "")
 	}
-	println("Insert using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+	println("Insert", COUNT, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+	r.Close()
+
+	r = New(".")
 
 	start = time.Now()
 	l := r.LookupByPrefixAndDelimiter("2", "/", 100, 10, "")
 	if l.Len() != 1 {
 		t.Errorf("should got 1, but we got %d", l.Len())
 	}
-	println("lookup using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+	println("lookup", COUNT, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
 
 	start = time.Now()
 	_, err := json.Marshal(r)
@@ -252,6 +254,10 @@ func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 		}
 	}
 	println("gob marshal using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+	r.Close()
+
+	r = New(".")
+	defer r.Destory()
 
 	start = time.Now()
 	l = r.LookupByPrefixAndDelimiter("2", "#", COUNT/10, 10, "2013/1")
@@ -265,26 +271,33 @@ func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 	println("bad lookup:", time.Since(start).Nanoseconds()/1000000000, " sec")
 }
 
-func TestLookupByPrefixAndDelimiter_complex_many_ondisk(t *testing.T) {
+func TestLookupByPrefixAndDelimiter_complex_many_bigkey(t *testing.T) {
 	r := New(".")
 
 	start := time.Now()
+	b := bytes.Buffer{}
+	for i := 0; i < 1000; i++ {
+		b.WriteByte('c')
+	}
+
+	buf := b.String()
 	for i := 0; i < COUNT; i++ {
 		key := fmt.Sprintf("2013/%d", i)
-		r.Insert(key, "")
+		r.Insert(key+buf, "")
 	}
-	println("Insert using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+
 	r.Close()
 
+	println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$big key Insert", COUNT, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+
 	r = New(".")
-	defer r.Destory()
 
 	start = time.Now()
 	l := r.LookupByPrefixAndDelimiter("2", "/", 100, 10, "")
 	if l.Len() != 1 {
 		t.Errorf("should got 1, but we got %d", l.Len())
 	}
-	println("lookup using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+	println("lookup", COUNT, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
 
 	start = time.Now()
 	_, err := json.Marshal(r)
@@ -306,6 +319,10 @@ func TestLookupByPrefixAndDelimiter_complex_many_ondisk(t *testing.T) {
 		}
 	}
 	println("gob marshal using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+	r.Close()
+
+	r = New(".")
+	defer r.Destory()
 
 	start = time.Now()
 	l = r.LookupByPrefixAndDelimiter("2", "#", COUNT/10, 10, "2013/1")
@@ -394,7 +411,6 @@ func TestLookup(t *testing.T) {
 }
 
 func TestLookupOnDisk(t *testing.T) {
-	println(".................................................................................")
 	r := New(".")
 
 	r.Insert("test", "test")
@@ -470,8 +486,6 @@ func TestLookupOnDisk(t *testing.T) {
 	} else {
 		t.Errorf("expecting %s found nil", "te")
 	}
-
-	println(".................................................................................")
 }
 
 func TestDelete(t *testing.T) {
@@ -515,6 +529,104 @@ func TestDelete(t *testing.T) {
 				t.Errorf("expecting %s found %s", "water", s)
 			}
 		}
+	}
+
+	if v := r.Delete("team"); v != nil {
+		if s, ok := v.(string); !ok {
+			t.Errorf("expecting %s found nil", "team")
+		} else {
+			if s != "team" {
+				t.Errorf("expecting %s found %s", "team", s)
+			}
+		}
+	}
+	if v := r.Lookup("water"); v != nil {
+		t.Errorf("expecting nil found %v", v)
+	}
+
+	r.Insert("team", "tortugas")
+	if v := r.Lookup("team"); v != nil {
+		if s, ok := v.(string); !ok {
+			t.Errorf("expecting %s found nil", "tortugas")
+		} else {
+			if s != "tortugas" {
+				t.Errorf("expecting %s found %s", "tortugas", s)
+			}
+		}
+	}
+}
+
+func TestDeleteDisk(t *testing.T) {
+	r := New(".")
+
+	r.Insert("test", "test")
+	r.Insert("slow", "slow")
+	r.Insert("water", "water")
+	r.Insert("slower", "slower")
+	r.Insert("tester", "tester")
+	r.Insert("team", "team")
+	r.Insert("toast", "toast")
+	r.Insert("te", "te")
+
+	if v := r.Lookup("tester"); v == nil {
+		t.Error("expecting non nil")
+	}
+
+	println("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+	if v := r.Delete("tester"); v != nil {
+		if s, ok := v.(string); !ok {
+			t.Errorf("expecting %s found nil", "tester")
+		} else {
+			if s != "tester" {
+				t.Errorf("expecting %s found %s", "tester", s)
+			}
+		}
+	}
+
+	r.Close()
+
+	r = New(".")
+
+	if v := r.Lookup("tester"); v != nil {
+		t.Error("expecting nil")
+	}
+
+	println("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+
+	if v := r.Delete("slow"); v != nil {
+		if s, ok := v.(string); !ok {
+			t.Errorf("expecting %s found nil", "slow")
+		} else {
+			if s != "slow" {
+				t.Errorf("expecting %s found %s", "slow", s)
+			}
+		}
+	}
+
+	r.Close()
+
+	r = New(".")
+
+	if v := r.Lookup("slower"); v == nil {
+		t.Error("expecting non nil")
+	}
+
+	if v := r.Delete("water"); v != nil {
+		if s, ok := v.(string); !ok {
+			t.Errorf("expecting %s found nil", "water")
+		} else {
+			if s != "water" {
+				t.Errorf("expecting %s found %s", "water", s)
+			}
+		}
+	}
+
+	r.Close()
+	r = New(".")
+	defer r.Destory()
+
+	if v := r.Lookup("water"); v != nil {
+		t.Error("expecting nil")
 	}
 
 	if v := r.Delete("team"); v != nil {
