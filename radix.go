@@ -9,7 +9,11 @@ package radix
 
 import (
 	"container/list"
+	"encoding/json"
 	"errors"
+	"log"
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,21 +23,70 @@ import (
 type Radix struct {
 	Root *radNode   // Root of the radix tree
 	lock sync.Mutex // protect the radix
+	path string
 }
 
 // a node of a radix tree
 type radNode struct {
-	Prefix   string      `json:"p,omitempty"` // current prefix of the node
-	Children []*radNode  `json:"c,omitempty"` // neighbors of the node
-	Value    interface{} `json:"v,omitempty"` // stored Value
+	Prefix   string      `json:"prefix,omitempty"` // current prefix of the node
+	Children []*radNode  `json:"children,omitempty"`
+	Value    interface{} `json:"value,omitempty"` // stored Value
+	Seq      int64
+	InDisk   bool
 }
 
 // New returns a new, empty radix tree.
-func New() *Radix {
+func New(path string) *Radix {
+	log.Println("open db")
 	rad := &Radix{
-		Root: &radNode{},
+		Root: &radNode{Seq: -1},
+		path: path + "/db",
 	}
+
+	if err := store.Open(rad.path); err != nil {
+		log.Fatal(err)
+	}
+
+	if err := rad.Root.getChildrenByNode(rad.Root); err != nil {
+		log.Println(err)
+		rad.Root.persistentNode(*rad.Root)
+		log.Printf("%+v", rad.Root)
+	} else {
+		log.Printf("%+v", rad.Root)
+		startSeq, err = store.GetLastSeq()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	return rad
+}
+
+var startSeq int64 = -1
+var store = &Levelstorage{}
+
+func AllocSeq() int64 {
+	seq := atomic.AddInt64(&startSeq, 1)
+	err := store.SaveLastSeq(seq)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// log.Println("alloc seq", seq)
+
+	return seq
+}
+
+func (rad *Radix) Close() error {
+	log.Println("close db")
+	return store.Close()
+}
+
+func (rad *Radix) Destory() error {
+	log.Println("Destory!")
+	store.Close()
+	os.RemoveAll(rad.path)
+	return nil
 }
 
 // Delete removes the Value associated with a particular key and returns it.
@@ -45,6 +98,7 @@ func (rad *Radix) Delete(key string) interface{} {
 }
 
 // implements delete
+// todo: need to remove it if this is leaf node
 func (r *radNode) delete(key string) interface{} {
 	if x, ok := r.lookup(key); ok {
 		val := x.Value
@@ -65,9 +119,83 @@ func (rad *Radix) Insert(key string, Value interface{}) error {
 	return rad.Root.insert(key, Value)
 }
 
+func (r *radNode) persistentNode(n radNode) error {
+	children := n.cloneChildren()
+
+	seq := strconv.FormatInt(n.Seq, 10)
+	n.InDisk = true
+	n.Children = children
+	buf, err := json.Marshal(n)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// log.Println("persistentNode", string(buf))
+
+	if err = store.WriteNode(seq, buf); err != nil {
+		log.Fatal(err)
+	}
+
+	return err
+}
+
+func (r *radNode) getChildrenByNode(n *radNode) error {
+	seq := n.Seq
+	seqstr := strconv.FormatInt(n.Seq, 10)
+	buf, err := store.ReadNode(seqstr)
+	if err != nil {
+		log.Println(err, n.Seq)
+		return err
+	}
+
+	err = json.Unmarshal(buf, n)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	n.InDisk = false
+
+	//check
+	if n.Seq != seq {
+		log.Fatal("can't be ")
+	}
+
+	// log.Printf("%+v\n", n)
+
+	return err
+}
+
+func (r *radNode) cloneChildren() []*radNode {
+	nodes := make([]*radNode, 0)
+	for _, d := range r.Children {
+		e := &radNode{}
+		*e = *d //copy it
+		e.Children = nil
+		e.InDisk = true
+		nodes = append(nodes, e)
+	}
+
+	return nodes
+}
+
 // implements insert
 func (r *radNode) insert(key string, Value interface{}) error {
+	// log.Println("insert", key)
+	if r.InDisk {
+		log.Printf("get %+v", r)
+		r.getChildrenByNode(r)
+	}
+
 	for _, d := range r.Children {
+		// log.Println("d.Prefix", d.Prefix)
+		if d.InDisk {
+			checkprefix := d.Prefix
+			d.getChildrenByNode(d)
+			if d.Prefix != checkprefix {
+				log.Fatal("can't be")
+			}
+		}
+
 		comm := common(key, d.Prefix)
 		if len(comm) == 0 {
 			continue
@@ -76,9 +204,12 @@ func (r *radNode) insert(key string, Value interface{}) error {
 		if len(comm) == len(key) {
 			if len(comm) == len(d.Prefix) {
 				if d.Value == nil {
+					log.Printf("set seq %d %s value", d.Seq, Value)
 					d.Value = Value
+					d.persistentNode(*d)
 					return nil
 				}
+				log.Printf("%s key already in use", Value)
 				return errors.New("key already in use")
 			}
 
@@ -86,11 +217,16 @@ func (r *radNode) insert(key string, Value interface{}) error {
 				Prefix:   d.Prefix[len(comm):],
 				Value:    d.Value,
 				Children: d.Children,
+				Seq:      AllocSeq(),
 			}
+
+			n.persistentNode(*n)
+
 			d.Children = make([]*radNode, 1, 1)
 			d.Children[0] = n
 			d.Prefix = comm
 			d.Value = Value
+			d.persistentNode(*d)
 			return nil
 		}
 
@@ -98,28 +234,42 @@ func (r *radNode) insert(key string, Value interface{}) error {
 			return d.insert(key[len(comm):], Value)
 		}
 
+		//ex: ab, insert ac, extra common a
+
 		p := &radNode{
 			Prefix:   d.Prefix[len(comm):],
 			Value:    d.Value,
 			Children: d.Children,
+			Seq:      AllocSeq(),
 		}
+
+		p.persistentNode(*p)
 		n := &radNode{
 			Prefix: key[len(comm):],
 			Value:  Value,
+			Seq:    AllocSeq(),
 		}
+
+		n.persistentNode(*n)
+
 		d.Prefix = comm
 		d.Children = make([]*radNode, 2, 2)
 		d.Children[0] = p
 		d.Children[1] = n
 		d.Value = nil
+		d.persistentNode(*d)
 		return nil
 	}
 
 	n := &radNode{
 		Prefix: key,
 		Value:  Value,
+		Seq:    AllocSeq(),
 	}
+	r.persistentNode(*n)
 	r.Children = append(r.Children, n)
+	r.persistentNode(*r)
+
 	return nil
 }
 
@@ -203,6 +353,10 @@ func (r *radNode) getFirstByDelimiter(marker string, delimiter string, limitCoun
 	// 	println("exit level ", limitLevel)
 	// }()
 
+	if r.InDisk {
+		r.getChildrenByNode(r)
+	}
+
 	//search root first
 	if pos := strings.Index(r.Prefix, delimiter); pos >= 0 {
 		// println("delimiter ", delimiter, " found")
@@ -217,6 +371,10 @@ L:
 	for _, d := range r.Children {
 		//leaf or prefix include delimiter
 		// println("check ", d.Prefix, "marker ", marker)
+
+		if d.InDisk {
+			d.getChildrenByNode(d)
+		}
 
 		if len(d.Children) == 0 { //leaf node
 			// println("leaf: ", d.Prefix)
@@ -270,7 +428,16 @@ L:
 
 // implementats lookup
 func (r *radNode) lookup(key string) (*radNode, bool) {
+	if r.InDisk {
+		r.getChildrenByNode(r)
+	}
+
 	for _, d := range r.Children {
+		if d.InDisk {
+			d.getChildrenByNode(d)
+			log.Printf("get %+v", d)
+		}
+
 		comm := common(key, d.Prefix)
 		if len(comm) == 0 {
 			continue

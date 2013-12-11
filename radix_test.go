@@ -14,7 +14,9 @@ import (
 )
 
 func TestInsertion(t *testing.T) {
-	r := New()
+	r := New(".")
+	defer r.Destory()
+
 	r.Insert("test", "test")
 	r.Insert("slow", "slow")
 	r.Insert("water", "water")
@@ -98,7 +100,9 @@ func TestInsertion(t *testing.T) {
 }
 
 func TestLookupByPrefixAndDelimiter(t *testing.T) {
-	r := New()
+	r := New(".")
+	defer r.Destory()
+
 	r.Insert("test", "")
 	r.Insert("slow", "")
 	r.Insert("water", "")
@@ -121,7 +125,9 @@ func TestLookupByPrefixAndDelimiter(t *testing.T) {
 }
 
 func TestLookupByPrefixAndDelimiter_complex(t *testing.T) {
-	r := New()
+	r := New(".")
+	defer r.Destory()
+
 	r.Insert("te#st", "")
 	r.Insert("slow", "")
 	r.Insert("water", "")
@@ -144,7 +150,9 @@ func TestLookupByPrefixAndDelimiter_complex(t *testing.T) {
 }
 
 func TestLookupByPrefixAndDelimiter_limit(t *testing.T) {
-	r := New()
+	r := New(".")
+	defer r.Destory()
+
 	r.Insert("test", "")
 	r.Insert("slow", "")
 	r.Insert("water", "")
@@ -167,7 +175,9 @@ func TestLookupByPrefixAndDelimiter_limit(t *testing.T) {
 }
 
 func TestLookupByPrefixAndDelimiter_limit_marker(t *testing.T) {
-	r := New()
+	r := New(".")
+	defer r.Destory()
+
 	r.Insert("test", "")
 	r.Insert("slow", "")
 	r.Insert("water", "")
@@ -202,10 +212,11 @@ func TestLookupByPrefixAndDelimiter_limit_marker(t *testing.T) {
 	}
 }
 
-const COUNT = 10000000
+const COUNT = 100000
 
 func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
-	r := New()
+	r := New(".")
+	defer r.Destory()
 
 	start := time.Now()
 	for i := 0; i < COUNT; i++ {
@@ -254,8 +265,64 @@ func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 	println("bad lookup:", time.Since(start).Nanoseconds()/1000000000, " sec")
 }
 
+func TestLookupByPrefixAndDelimiter_complex_many_ondisk(t *testing.T) {
+	r := New(".")
+
+	start := time.Now()
+	for i := 0; i < COUNT; i++ {
+		key := fmt.Sprintf("2013/%d", i)
+		r.Insert(key, "")
+	}
+	println("Insert using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+	r.Close()
+
+	r = New(".")
+	defer r.Destory()
+
+	start = time.Now()
+	l := r.LookupByPrefixAndDelimiter("2", "/", 100, 10, "")
+	if l.Len() != 1 {
+		t.Errorf("should got 1, but we got %d", l.Len())
+	}
+	println("lookup using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+
+	start = time.Now()
+	_, err := json.Marshal(r)
+	if err != nil {
+		t.Fatal(err)
+		for v := l.Front(); v != nil; v = v.Next() {
+			println(v.Value.(string))
+		}
+	}
+	println("json marshal using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+
+	start = time.Now()
+	var buffer bytes.Buffer
+	err = gob.NewEncoder(&buffer).Encode(r)
+	if err != nil {
+		t.Fatal(err)
+		for v := l.Front(); v != nil; v = v.Next() {
+			println(v.Value.(string))
+		}
+	}
+	println("gob marshal using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+
+	start = time.Now()
+	l = r.LookupByPrefixAndDelimiter("2", "#", COUNT/10, 10, "2013/1")
+	if l.Len() != COUNT/10 {
+		t.Errorf("should got %d, but we got %d", COUNT/10, l.Len())
+		for v := l.Front(); v != nil; v = v.Next() {
+			println(v.Value.(string))
+		}
+	}
+
+	println("bad lookup:", time.Since(start).Nanoseconds()/1000000000, " sec")
+}
+
 func TestLookup(t *testing.T) {
-	r := New()
+	r := New(".")
+	defer r.Destory()
+
 	r.Insert("test", "test")
 	r.Insert("slow", "slow")
 	r.Insert("water", "water")
@@ -264,13 +331,6 @@ func TestLookup(t *testing.T) {
 	r.Insert("team", "team")
 	r.Insert("toast", "toast")
 	r.Insert("te", "te")
-
-	buf, err := json.Marshal(r)
-	if err != nil {
-		t.Error(err)
-	}
-
-	println(string(buf))
 
 	if v := r.Lookup("tester"); v != nil {
 		if s, ok := v.(string); !ok {
@@ -333,8 +393,91 @@ func TestLookup(t *testing.T) {
 	}
 }
 
+func TestLookupOnDisk(t *testing.T) {
+	println(".................................................................................")
+	r := New(".")
+
+	r.Insert("test", "test")
+	r.Insert("slow", "slow")
+	r.Insert("water", "water")
+	r.Insert("slower", "slower")
+	r.Insert("tester", "tester")
+	r.Insert("team", "team")
+	r.Insert("toast", "toast")
+	r.Insert("te", "te")
+
+	r.Close()
+
+	r = New(".")
+	defer r.Destory()
+
+	if v := r.Lookup("tester"); v != nil {
+		if s, ok := v.(string); !ok {
+			t.Errorf("expecting %s found nil", "tester")
+		} else {
+			if s != "tester" {
+				t.Errorf("expecting %s found %s", "tester", s)
+			}
+		}
+	} else {
+		t.Errorf("expecting %s found nil", "tester")
+	}
+	if v := r.Lookup("slow"); v != nil {
+		if s, ok := v.(string); !ok {
+			t.Errorf("expecting %s found nil", "slow")
+		} else {
+			if s != "slow" {
+				t.Errorf("expecting %s found %s", "slow", s)
+			}
+		}
+	} else {
+		t.Errorf("expecting %s found nil", "tester")
+	}
+	if v := r.Lookup("water"); v != nil {
+		if s, ok := v.(string); !ok {
+			t.Errorf("expecting %s found nil", "water")
+		} else {
+			if s != "water" {
+				t.Errorf("expecting %s found %s", "water", s)
+			}
+		}
+	} else {
+		t.Errorf("expecting %s found nil", "tester")
+	}
+	if v := r.Lookup("waterloo"); v != nil {
+		t.Errorf("expecting nil found %v", v)
+	}
+	if v := r.Lookup("team"); v != nil {
+		if s, ok := v.(string); !ok {
+			t.Errorf("expecting %s found nil", "team")
+		} else {
+			if s != "team" {
+				t.Errorf("expecting %s found %s", "team", s)
+			}
+		}
+	} else {
+		t.Errorf("expecting %s found nil", "tester")
+	}
+
+	if v := r.Lookup("te"); v != nil {
+		if s, ok := v.(string); !ok {
+			t.Errorf("expecting %s found nil", "te")
+		} else {
+			if s != "te" {
+				t.Errorf("expecting %s found %s", "te", s)
+			}
+		}
+	} else {
+		t.Errorf("expecting %s found nil", "te")
+	}
+
+	println(".................................................................................")
+}
+
 func TestDelete(t *testing.T) {
-	r := New()
+	r := New(".")
+	defer r.Destory()
+
 	r.Insert("test", "test")
 	r.Insert("slow", "slow")
 	r.Insert("water", "water")
@@ -400,7 +543,9 @@ func TestDelete(t *testing.T) {
 }
 
 func TestPrefix(t *testing.T) {
-	r := New()
+	r := New(".")
+	defer r.Destory()
+
 	r.Insert("test", "test")
 	r.Insert("slow", "slow")
 	r.Insert("water", "water")
