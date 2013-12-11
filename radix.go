@@ -90,6 +90,7 @@ func (rad *Radix) Destory() error {
 }
 
 // Delete removes the Value associated with a particular key and returns it.
+//todo: using transaction
 func (rad *Radix) Delete(key string) interface{} {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
@@ -98,13 +99,9 @@ func (rad *Radix) Delete(key string) interface{} {
 }
 
 // implements delete
-// todo: need to remove it if this is leaf node
 func (r *radNode) delete(key string) interface{} {
 	if x, father, i, ok := r.lookup(key); ok {
 		val := x.Value
-		// only assign a nil, therefore skip any modification
-		// of the radix topology
-
 		//seq := x.Seq
 
 		log.Println("delete", key, "father", father)
@@ -182,7 +179,7 @@ func (r *radNode) getChildrenByNode(n *radNode) error {
 
 	//check
 	if n.Seq != seq {
-		log.Fatal("can't be ")
+		log.Fatal("can't be real")
 	}
 
 	// log.Printf("%+v\n", n)

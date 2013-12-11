@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+const COUNT = 100000
+
 func TestInsertion(t *testing.T) {
 	r := New(".")
 	defer r.Destory()
@@ -211,8 +213,6 @@ func TestLookupByPrefixAndDelimiter_limit_marker(t *testing.T) {
 		println("---------------------------")
 	}
 }
-
-const COUNT = 1000
 
 func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 	r := New(".")
