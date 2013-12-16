@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const COUNT = 100000
+const COUNT = 1000000
 
 func TestInsertion(t *testing.T) {
 	r := New(".")
@@ -283,7 +283,7 @@ func TestLookupByPrefixAndDelimiter_complex_many_bigkey(t *testing.T) {
 	buf := b.String()
 	for i := 0; i < COUNT; i++ {
 		key := fmt.Sprintf("2013/%d", i)
-		r.Insert(key+buf, "")
+		r.Insert(key+buf, b.Bytes())
 	}
 
 	r.Close()

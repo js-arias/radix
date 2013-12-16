@@ -117,7 +117,7 @@ func (r *radNode) delete(key string) interface{} {
 			father.Children = append(father.Children[:i], father.Children[:i]...)
 			father.persistentNode(*father)
 			log.Println("delete", key, "father", father)
-		} else if len(father.Children) == 1 {
+		} else if len(father.Children) == 1 { //todo: recursive find & delete
 			father.Children = nil
 			father.persistentNode(*father)
 			//todo:remove from leveldb
@@ -168,6 +168,10 @@ func (r *radNode) getChildrenByNode(n *radNode) error {
 	if err != nil {
 		log.Println(err, n.Seq)
 		return err
+	}
+
+	if buf == nil {
+		return errors.New("get key failed")
 	}
 
 	err = json.Unmarshal(buf, n)
@@ -234,6 +238,8 @@ func (r *radNode) insert(key string, Value interface{}) error {
 				log.Printf("%s key already in use", Value)
 				return errors.New("key already in use")
 			}
+
+			//ex: ab, insert a
 
 			n := &radNode{
 				Prefix:   d.Prefix[len(comm):],

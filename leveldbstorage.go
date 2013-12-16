@@ -1,7 +1,7 @@
 package radix
 
 import (
-	"github.com/syndtr/goleveldb/leveldb"
+	leveldb "github.com/jmhodges/levigo"
 	"log"
 	"strconv"
 )
@@ -12,34 +12,45 @@ type Levelstorage struct {
 
 const LAST_SEQ_KEY = "##LAST_SEQ_KEY"
 
+var (
+	wo = leveldb.NewWriteOptions()
+	ro = leveldb.NewReadOptions()
+)
+
 func init() {
 	log.SetFlags(log.Lshortfile | log.LstdFlags)
 }
 
 func (self *Levelstorage) Open(path string) (err error) {
-	self.db, err = leveldb.OpenFile(path, nil)
+	opts := leveldb.NewOptions()
+	opts.SetCache(leveldb.NewLRUCache(3 << 30))
+	opts.SetCreateIfMissing(true)
+	opts.SetBlockSize(4 * 1024 * 1024)
+	opts.SetWriteBufferSize(50 * 1024 * 1024)
+	self.db, err = leveldb.Open(path, opts)
 	return err
 }
 
 func (self *Levelstorage) WriteNode(key string, value []byte) error {
-	return self.db.Put([]byte(key), value, nil)
+	return self.db.Put(wo, []byte(key), value)
 }
 
 func (self *Levelstorage) ReadNode(key string) ([]byte, error) {
-	return self.db.Get([]byte(key), nil)
+	return self.db.Get(ro, []byte(key))
 }
 
 func (self *Levelstorage) Close() error {
-	return self.db.Close()
+	self.db.Close()
+	return nil
 }
 
 func (self *Levelstorage) SaveLastSeq(seq int64) error {
 	seqstr := strconv.FormatInt(seq, 10)
-	return self.db.Put([]byte(LAST_SEQ_KEY), []byte(seqstr), nil)
+	return self.db.Put(wo, []byte(LAST_SEQ_KEY), []byte(seqstr))
 }
 
 func (self *Levelstorage) GetLastSeq() (int64, error) {
-	seqstr, err := self.db.Get([]byte(LAST_SEQ_KEY), nil)
+	seqstr, err := self.db.Get(ro, []byte(LAST_SEQ_KEY))
 	if err != nil {
 		return -1, err
 	}
