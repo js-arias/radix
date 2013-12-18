@@ -9,11 +9,9 @@ package radix
 
 import (
 	"container/list"
-	"encoding/json"
 	"errors"
 	"log"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -30,7 +28,8 @@ type Radix struct {
 type radNode struct {
 	Prefix   string      `json:"prefix,omitempty"` // current prefix of the node
 	Children []*radNode  `json:"children,omitempty"`
-	Value    interface{} `json:"value,omitempty"` // stored Value
+	Value    interface{} `json:"value,omitempty"` // stored key
+	father   *radNode
 	Seq      int64
 	InDisk   bool
 }
@@ -47,12 +46,12 @@ func New(path string) *Radix {
 		log.Fatal(err)
 	}
 
-	if err := rad.Root.getChildrenByNode(rad.Root); err != nil {
+	if err := getChildrenByNode(rad.Root); err != nil {
 		log.Println(err)
-		rad.Root.persistentNode(*rad.Root)
-		log.Printf("%+v", rad.Root)
+		persistentNode(*rad.Root, nil)
+		log.Printf("root: %+v", rad.Root)
 	} else {
-		log.Printf("%+v", rad.Root)
+		log.Printf("root: %+v", rad.Root)
 		startSeq, err = store.GetLastSeq()
 		if err != nil {
 			log.Fatal(err)
@@ -60,21 +59,6 @@ func New(path string) *Radix {
 	}
 
 	return rad
-}
-
-var startSeq int64 = -1
-var store = &Levelstorage{}
-
-func AllocSeq() int64 {
-	seq := atomic.AddInt64(&startSeq, 1)
-	err := store.SaveLastSeq(seq)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// log.Println("alloc seq", seq)
-
-	return seq
 }
 
 func (rad *Radix) Close() error {
@@ -89,43 +73,94 @@ func (rad *Radix) Destory() error {
 	return nil
 }
 
+func (rad *Radix) DumpTree() error {
+	if rad.Root == nil {
+		return nil
+	}
+
+	log.Println("dump tree:")
+
+	DumpNode(rad.Root, 0)
+
+	return nil
+}
+
 // Delete removes the Value associated with a particular key and returns it.
 //todo: using transaction
-func (rad *Radix) Delete(key string) interface{} {
+func (rad *Radix) Delete(key string) []byte {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
 
 	return rad.Root.delete(key)
 }
 
-// implements delete
-func (r *radNode) delete(key string) interface{} {
-	if x, father, i, ok := r.lookup(key); ok {
-		val := x.Value
-		//seq := x.Seq
+func deleteNode(n *radNode) {
+	if n == nil {
+		return
+	}
 
-		log.Println("delete", key, "father", father)
+	//remove from storage
+	if n.Value != nil {
+		err := delFromStoragebyKey(n.Value.(string))
+		if err != nil {
+			log.Fatal(err)
+		}
+		n.Value = nil
+	}
 
-		if len(x.Children) > 0 {
-			x.Value = nil
-			x.persistentNode(*x)
-			return val
+	if len(n.Children) > 0 {
+		err := persistentNode(*n, nil)
+		if err != nil {
+			log.Fatal(err)
 		}
 
-		//x is leaf node
-		if len(father.Children) > 1 {
-			father.Children = append(father.Children[:i], father.Children[:i]...)
-			father.persistentNode(*father)
-			log.Println("delete", key, "father", father)
-		} else if len(father.Children) == 1 { //todo: recursive find & delete
-			father.Children = nil
-			father.persistentNode(*father)
-			//todo:remove from leveldb
+		return
+	}
+
+	//now, n has no children, check if we need to clean father
+
+	//get index
+	//todo: binary search
+	i := 0
+	for ; i < len(n.father.Children); i++ {
+		if n.father.Children[i].Seq == n.Seq {
+			break
+		}
+	}
+
+	//n is leaf node
+	if len(n.father.Children) > 1 {
+		delNodeFromStorage(n.Seq)
+		n.father.Children = append(n.father.Children[:i], n.father.Children[i+1:]...)
+		persistentNode(*n.father, nil)
+		//todo: if there is only node after remove, we can do combine
+	} else if len(n.father.Children) == 1 { //todo: recursive find & delete
+		delNodeFromStorage(n.Seq)
+		n.father.Children = nil
+
+		if n.father.Value == nil {
+			deleteNode(n.father)
 		} else {
-			panic("never happend")
+			persistentNode(*n.father, nil)
+		}
+	} else {
+		panic("never happend")
+	}
+}
+
+// implements delete
+func (r *radNode) delete(key string) []byte {
+	if x, father, _, ok := r.lookup(key); ok {
+		v, err := GetValueFromStore(x.Value.(string))
+		if err != nil {
+			log.Fatal("never happend")
 		}
 
-		return val
+		log.Printf("delete %s father %+v", key, father)
+
+		deleteNode(x)
+
+		return v
 	}
 
 	return nil
@@ -134,89 +169,26 @@ func (r *radNode) delete(key string) interface{} {
 // Insert put a Value in the radix. It returns an error if the given key
 // is already in use.
 //todo: using transaction(batch write)
-func (rad *Radix) Insert(key string, Value interface{}) error {
+func (rad *Radix) Insert(key string, Value string) error {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
 
-	return rad.Root.insert(key, Value)
-}
-
-func (r *radNode) persistentNode(n radNode) error {
-	children := n.cloneChildren()
-
-	seq := strconv.FormatInt(n.Seq, 10)
-	n.InDisk = true
-	n.Children = children
-	buf, err := json.Marshal(n)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// log.Println("persistentNode", string(buf))
-
-	if err = store.WriteNode(seq, buf); err != nil {
-		log.Fatal(err)
-	}
-
-	return err
-}
-
-func (r *radNode) getChildrenByNode(n *radNode) error {
-	seq := n.Seq
-	seqstr := strconv.FormatInt(n.Seq, 10)
-	buf, err := store.ReadNode(seqstr)
-	if err != nil {
-		log.Println(err, n.Seq)
-		return err
-	}
-
-	if buf == nil {
-		return errors.New("get key failed")
-	}
-
-	err = json.Unmarshal(buf, n)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	n.InDisk = false
-
-	//check
-	if n.Seq != seq {
-		log.Fatal("can't be real")
-	}
-
-	// log.Printf("%+v\n", n)
-
-	return err
-}
-
-func (r *radNode) cloneChildren() []*radNode {
-	nodes := make([]*radNode, 0)
-	for _, d := range r.Children {
-		e := &radNode{}
-		*e = *d //copy it
-		e.Children = nil
-		e.InDisk = true
-		nodes = append(nodes, e)
-	}
-
-	return nodes
+	return rad.Root.insert(key, []byte(Value), key)
 }
 
 // implements insert
-func (r *radNode) insert(key string, Value interface{}) error {
+func (r *radNode) insert(key string, Value []byte, orgKey string) error {
 	// log.Println("insert", key)
 	if r.InDisk {
 		log.Printf("get %+v", r)
-		r.getChildrenByNode(r)
+		getChildrenByNode(r)
 	}
 
 	for _, d := range r.Children {
 		// log.Println("d.Prefix", d.Prefix)
 		if d.InDisk {
 			checkprefix := d.Prefix
-			d.getChildrenByNode(d)
+			getChildrenByNode(d)
 			if d.Prefix != checkprefix {
 				log.Fatal("can't be")
 			}
@@ -231,11 +203,11 @@ func (r *radNode) insert(key string, Value interface{}) error {
 			if len(comm) == len(d.Prefix) {
 				if d.Value == nil {
 					log.Printf("set seq %d %s value", d.Seq, Value)
-					d.Value = Value
-					d.persistentNode(*d)
+					d.Value = orgKey
+					persistentNode(*d, Value)
 					return nil
 				}
-				log.Printf("%s key already in use", Value)
+				log.Printf("%s key already in use", orgKey)
 				return errors.New("key already in use")
 			}
 
@@ -244,22 +216,23 @@ func (r *radNode) insert(key string, Value interface{}) error {
 			n := &radNode{
 				Prefix:   d.Prefix[len(comm):],
 				Value:    d.Value,
+				father:   d,
 				Children: d.Children,
 				Seq:      AllocSeq(),
 			}
 
-			n.persistentNode(*n)
+			persistentNode(*n, nil)
 
 			d.Children = make([]*radNode, 1, 1)
 			d.Children[0] = n
 			d.Prefix = comm
-			d.Value = Value
-			d.persistentNode(*d)
+			d.Value = orgKey
+			persistentNode(*d, Value)
 			return nil
 		}
 
 		if len(comm) == len(d.Prefix) {
-			return d.insert(key[len(comm):], Value)
+			return d.insert(key[len(comm):], Value, orgKey)
 		}
 
 		//ex: ab, insert ac, extra common a
@@ -267,48 +240,57 @@ func (r *radNode) insert(key string, Value interface{}) error {
 		p := &radNode{
 			Prefix:   d.Prefix[len(comm):],
 			Value:    d.Value,
+			father:   d,
 			Children: d.Children,
 			Seq:      AllocSeq(),
 		}
 
-		p.persistentNode(*p)
+		persistentNode(*p, nil)
 		n := &radNode{
 			Prefix: key[len(comm):],
-			Value:  Value,
+			Value:  orgKey,
+			father: d,
 			Seq:    AllocSeq(),
 		}
 
-		n.persistentNode(*n)
+		persistentNode(*n, Value)
 
 		d.Prefix = comm
+		d.Value = nil
 		d.Children = make([]*radNode, 2, 2)
 		d.Children[0] = p
 		d.Children[1] = n
-		d.Value = nil
-		d.persistentNode(*d)
+
+		persistentNode(*d, nil)
 		return nil
 	}
 
 	n := &radNode{
 		Prefix: key,
-		Value:  Value,
+		Value:  orgKey,
+		father: r,
 		Seq:    AllocSeq(),
 	}
-	r.persistentNode(*n)
+	persistentNode(*n, Value)
 	r.Children = append(r.Children, n)
-	r.persistentNode(*r)
+	persistentNode(*r, nil)
 
 	return nil
 }
 
 // Lookup searches for a particular string in the tree.
-func (rad *Radix) Lookup(key string) interface{} {
+func (rad *Radix) Lookup(key string) []byte {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
 
 	if x, _, _, ok := rad.Root.lookup(key); ok {
-		return x.Value
+		buf, err := GetValueFromStore(x.Value.(string))
+		if err != nil {
+			return nil
+		}
+		return buf
 	}
+
 	return nil
 }
 
@@ -382,7 +364,7 @@ func (r *radNode) getFirstByDelimiter(marker string, delimiter string, limitCoun
 	// }()
 
 	if r.InDisk {
-		r.getChildrenByNode(r)
+		getChildrenByNode(r)
 	}
 
 	//search root first
@@ -401,7 +383,7 @@ L:
 		// println("check ", d.Prefix, "marker ", marker)
 
 		if d.InDisk {
-			d.getChildrenByNode(d)
+			getChildrenByNode(d)
 		}
 
 		if len(d.Children) == 0 { //leaf node
@@ -454,16 +436,19 @@ L:
 	return moreCompleteList
 }
 
-// implementats lookup: node, father, exist, index
+// implementats lookup: node, father, index, exist
 func (r *radNode) lookup(key string) (*radNode, *radNode, int, bool) {
 	if r.InDisk {
-		r.getChildrenByNode(r)
+		getChildrenByNode(r)
+		log.Printf("get from disk %+v, searching %s", r, key)
 	}
+
+	// log.Println("lookup", key)
 
 	for i, d := range r.Children {
 		if d.InDisk {
-			d.getChildrenByNode(d)
-			log.Printf("get %+v", d)
+			getChildrenByNode(d)
+			log.Printf("get from disk %+v, searching %s", d, key)
 		}
 
 		comm := common(key, d.Prefix)
@@ -473,6 +458,7 @@ func (r *radNode) lookup(key string) (*radNode, *radNode, int, bool) {
 		// The key is found
 		if len(comm) == len(key) {
 			if len(comm) == len(d.Prefix) {
+				log.Println("found", d.Value)
 				return d, r, i, true
 			}
 			return d, nil, i, false

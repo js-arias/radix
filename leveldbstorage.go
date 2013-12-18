@@ -27,6 +27,7 @@ func (self *Levelstorage) Open(path string) (err error) {
 	opts.SetCreateIfMissing(true)
 	opts.SetBlockSize(4 * 1024 * 1024)
 	opts.SetWriteBufferSize(50 * 1024 * 1024)
+	// opts.SetCompression(leveldb.SnappyCompression)
 	self.db, err = leveldb.Open(path, opts)
 	return err
 }
@@ -37,6 +38,10 @@ func (self *Levelstorage) WriteNode(key string, value []byte) error {
 
 func (self *Levelstorage) ReadNode(key string) ([]byte, error) {
 	return self.db.Get(ro, []byte(key))
+}
+
+func (self *Levelstorage) DelNode(key string) error {
+	return self.db.Delete(wo, []byte(key))
 }
 
 func (self *Levelstorage) Close() error {
@@ -56,4 +61,16 @@ func (self *Levelstorage) GetLastSeq() (int64, error) {
 	}
 
 	return strconv.ParseInt(string(seqstr), 10, 64)
+}
+
+func (self *Levelstorage) DeleteKey(key string) error {
+	return self.db.Delete(wo, []byte(key))
+}
+
+func (self *Levelstorage) PutKey(key string, value []byte) error {
+	return self.db.Put(wo, []byte(key), value)
+}
+
+func (self *Levelstorage) GetKey(key string) ([]byte, error) {
+	return self.db.Get(ro, []byte(key))
 }
