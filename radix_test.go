@@ -7,6 +7,7 @@ package radix
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"testing"
 	"time"
 )
@@ -33,7 +34,7 @@ func TestDeleteAll(t *testing.T) {
 		t.Fatal("should be empty tree %+v", d)
 	}
 
-	println(r.Stats())
+	log.Println(r.Stats())
 }
 
 func TestInsertion(t *testing.T) {
@@ -44,7 +45,7 @@ func TestInsertion(t *testing.T) {
 	r.Insert("slow", "slow")
 	r.Insert("water", "water")
 	for _, d := range r.Root.Children {
-		if s := d.Value.(string); s != d.Prefix {
+		if s := d.Value; s != d.Prefix {
 			t.Errorf("d.Value = %s, want %s", s, d.Prefix)
 		}
 	}
@@ -140,7 +141,7 @@ func TestRecursiveDelete(t *testing.T) {
 		t.Errorf("should be empty tree %+v", d)
 	}
 
-	println(r.Stats())
+	log.Println(r.Stats())
 }
 
 func TestRecursiveDeleteMany(t *testing.T) {
@@ -163,7 +164,7 @@ func TestRecursiveDeleteMany(t *testing.T) {
 		t.Errorf("should be empty tree %+v", d)
 	}
 
-	println(r.Stats())
+	log.Println(r.Stats())
 }
 
 func TestRecursiveDelete1(t *testing.T) {
@@ -192,7 +193,7 @@ func TestRecursiveDelete1(t *testing.T) {
 func TestDeleteDisk(t *testing.T) {
 	r := New(".")
 
-	println("***************************************************************************")
+	log.Println("***************************************************************************")
 
 	r.Insert("test", "test")
 	r.Insert("slow", "slow")
@@ -223,7 +224,7 @@ func TestDeleteDisk(t *testing.T) {
 		}
 	}
 
-	println("after delete tester")
+	log.Println("after delete tester")
 
 	r.DumpTree()
 
@@ -243,7 +244,7 @@ func TestDeleteDisk(t *testing.T) {
 		}
 	}
 
-	println("after delete slow")
+	log.Println("after delete slow")
 
 	r.DumpTree()
 
@@ -264,7 +265,7 @@ func TestDeleteDisk(t *testing.T) {
 	r.Close()
 	r = New(".")
 
-	println("after delete water")
+	log.Println("after delete water")
 
 	r.DumpTree()
 	r.Close()
@@ -292,7 +293,7 @@ func TestDeleteDisk(t *testing.T) {
 		}
 	}
 
-	println("***************************************************************************")
+	log.Println("***************************************************************************")
 }
 
 func TestLookupByPrefixAndDelimiter(t *testing.T) {
@@ -315,7 +316,7 @@ func TestLookupByPrefixAndDelimiter(t *testing.T) {
 	if l.Len() != 6 {
 		t.Errorf("should got 5, but we got %d", l.Len())
 		for s := l.Front(); s != nil; s = s.Next() {
-			println(s.Value)
+			log.Println(s.Value)
 		}
 	}
 }
@@ -337,11 +338,11 @@ func TestLookupByPrefixAndDelimiter_complex(t *testing.T) {
 	r.Insert("test123//2", "")
 
 	l := r.LookupByPrefixAndDelimiter("t", "#", 100, 100, "")
-	if l.Len() != 8 {
-		t.Errorf("should got 8, but we got %d", l.Len())
+	if l.Len() != 10 {
 		for v := l.Front(); v != nil; v = v.Next() {
-			println(v.Value)
+			log.Println(v.Value)
 		}
+		t.Errorf("should got 10, but we got %d", l.Len())
 	}
 }
 
@@ -365,7 +366,23 @@ func TestLookupByPrefixAndDelimiter_limit(t *testing.T) {
 	if l.Len() != 2 {
 		t.Errorf("should got 2, but we got %d", l.Len())
 		for v := l.Front(); v != nil; v = v.Next() {
-			println(v.Value)
+			log.Println(v.Value)
+		}
+	}
+
+	l = r.LookupByPrefixAndDelimiter("t", "/", 3, 100, "")
+	if l.Len() != 3 {
+		t.Errorf("should got 2, but we got %d", l.Len())
+		for v := l.Front(); v != nil; v = v.Next() {
+			log.Println(v.Value)
+		}
+	}
+
+	l = r.LookupByPrefixAndDelimiter("t", "/", 10, 100, "")
+	if l.Len() != 6 {
+		t.Errorf("should got 2, but we got %d", l.Len())
+		for v := l.Front(); v != nil; v = v.Next() {
+			log.Println(v.Value)
 		}
 	}
 }
@@ -386,25 +403,25 @@ func TestLookupByPrefixAndDelimiter_limit_marker(t *testing.T) {
 	r.Insert("test123/2", "")
 	r.Insert("test123//2", "")
 
-	println("---------------------------")
+	log.Println("---------------------------")
 	l := r.LookupByPrefixAndDelimiter("t", "/", 5, 100, "test")
 	if l.Len() != 3 {
 		t.Errorf("should got 3, but we got %d", l.Len())
-		println("================================")
+		log.Println("================================")
 		for v := l.Front(); v != nil; v = v.Next() {
-			println(v.Value)
+			log.Println(v.Value)
 		}
-		println("---------------------------")
+		log.Println("---------------------------")
 	}
 
 	l = r.LookupByPrefixAndDelimiter("t", "/", 5, 100, "te")
 	if l.Len() != 5 {
 		t.Errorf("should got 5, but we got %d", l.Len())
-		println("================================")
+		log.Println("================================")
 		for v := l.Front(); v != nil; v = v.Next() {
-			println(v.Value)
+			log.Println(v.Value)
 		}
-		println("---------------------------")
+		log.Println("---------------------------")
 	}
 }
 
@@ -416,7 +433,7 @@ func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 		key := fmt.Sprintf("2013/%d", i)
 		r.Insert(key, "")
 	}
-	println("Insert", COUNT, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+	log.Println("Insert", COUNT, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
 	r.Close()
 
 	r = New(".")
@@ -426,7 +443,7 @@ func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 	if l.Len() != 1 {
 		t.Errorf("should got 1, but we got %d", l.Len())
 	}
-	println("lookup", COUNT, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+	log.Println("lookup", COUNT, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
 
 	r.Close()
 
@@ -438,11 +455,11 @@ func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 	if l.Len() != COUNT/10 {
 		t.Errorf("should got %d, but we got %d", COUNT/10, l.Len())
 		for s := l.Front(); s != nil; s = s.Next() {
-			println(s.Value)
+			log.Println(s.Value)
 		}
 	}
 
-	println("bad lookup:", time.Since(start).Nanoseconds()/1000000000, " sec")
+	log.Println("bad lookup:", time.Since(start).Nanoseconds()/1000000000, " sec")
 }
 
 func TestLookupByPrefixAndDelimiter_complex_many_bigkey(t *testing.T) {
@@ -462,7 +479,7 @@ func TestLookupByPrefixAndDelimiter_complex_many_bigkey(t *testing.T) {
 
 	r.Close()
 
-	println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$big key Insert", COUNT, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+	log.Println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$big key Insert", COUNT, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
 
 	r = New(".")
 
@@ -471,7 +488,7 @@ func TestLookupByPrefixAndDelimiter_complex_many_bigkey(t *testing.T) {
 	if l.Len() != 1 {
 		t.Errorf("should got 1, but we got %d", l.Len())
 	}
-	println("lookup", COUNT, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+	log.Println("lookup", COUNT, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
 
 	r.Close()
 
@@ -483,11 +500,11 @@ func TestLookupByPrefixAndDelimiter_complex_many_bigkey(t *testing.T) {
 	if l.Len() != COUNT/10 {
 		t.Errorf("should got %d, but we got %d", COUNT/10, l.Len())
 		for v := l.Front(); v != nil; v = v.Next() {
-			println(v.Value)
+			log.Println(v.Value)
 		}
 	}
 
-	println("bad lookup:", time.Since(start).Nanoseconds()/1000000000, " sec")
+	log.Println("bad lookup:", time.Since(start).Nanoseconds()/1000000000, " sec")
 }
 
 func TestLookup(t *testing.T) {
@@ -502,7 +519,7 @@ func TestLookup(t *testing.T) {
 	r.Insert("team", "team")
 	r.Insert("toast", "toast")
 	r.Insert("te", "te")
-	println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
+	log.Println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
 	if s := r.Lookup("tester"); s != nil {
 		if string(s) != "tester" {
 			t.Errorf("expecting %s found %s", "tester", s)

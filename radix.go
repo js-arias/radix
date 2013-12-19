@@ -26,9 +26,9 @@ const (
 
 // a node of a radix tree
 type radNode struct {
-	Prefix   string      `json:"prefix,omitempty"` // current prefix of the node
-	Children []*radNode  `json:"children,omitempty"`
-	Value    interface{} `json:"value,omitempty"` // stored key
+	Prefix   string     `json:"prefix,omitempty"` // current prefix of the node
+	Children []*radNode `json:"children,omitempty"`
+	Value    string     `json:"value,omitempty"` // stored key
 	Version  int64
 	father   *radNode
 	Seq      int64
@@ -59,12 +59,12 @@ func deleteNode(n *radNode) {
 
 	// log.Println(n.Seq, n.father.Seq)
 	//remove from storage
-	if n.Value != nil {
-		err := delFromStoragebyKey(n.Value.(string))
+	if len(n.Value) > 0 {
+		err := delFromStoragebyKey(n.Value)
 		if err != nil {
 			log.Fatal(err)
 		}
-		n.Value = nil
+		n.Value = ""
 	}
 
 	if len(n.Children) > 0 {
@@ -103,7 +103,7 @@ func deleteNode(n *radNode) {
 		// log.Println("recursive delete")
 		n.father.Children = nil
 
-		if n.father.Value == nil {
+		if len(n.father.Value) == 0 {
 			deleteNode(n.father) //recursive find & delete
 		} else {
 			persistentNode(*n.father, nil)
@@ -117,7 +117,7 @@ func deleteNode(n *radNode) {
 // implements delete
 func (r *radNode) delete(key string) []byte {
 	if x, _, ok := r.lookup(key); ok {
-		v, err := GetValueFromStore(x.Value.(string))
+		v, err := GetValueFromStore(x.Value)
 		if err != nil {
 			log.Fatal("never happend")
 		}
@@ -158,7 +158,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 
 		if len(comm) == len(key) {
 			if len(comm) == len(d.Prefix) {
-				if d.Value == nil {
+				if len(d.Value) == 0 {
 					d.Value = orgKey
 					persistentNode(*d, Value)
 					return nil, nil
@@ -166,7 +166,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 
 				if force || version == d.Version {
 					d.Value = orgKey
-					orgValue, err := GetValueFromStore(d.Value.(string))
+					orgValue, err := GetValueFromStore(d.Value)
 					if err != nil {
 						log.Fatal(err)
 					}
@@ -174,8 +174,6 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 					persistentNode(*d, Value)
 					return orgValue, nil
 				}
-
-				log.Println("^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
 
 				return nil, fmt.Errorf("version not match, version is %d, but you provide %d", d.Version, version)
 			}
@@ -232,7 +230,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 		persistentNode(*n, Value)
 
 		d.Prefix = comm
-		d.Value = nil
+		d.Value = ""
 		d.Children = make([]*radNode, 2, 2)
 		d.Children[0] = p
 		d.Children[1] = n
@@ -256,7 +254,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 
 // add the content of a node and its Childrenendants to a list
 func (r *radNode) addToList(l *list.List) {
-	if r.Value != nil {
+	if len(r.Value) > 0 {
 		l.PushBack(r.Value)
 	}
 	for _, d := range r.Children {
@@ -414,4 +412,8 @@ func common(s, o string) string {
 		}
 	}
 	return string(str)
+}
+
+func encodeValue(n *radNode, value string) {
+
 }
