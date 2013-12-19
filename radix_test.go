@@ -11,7 +11,30 @@ import (
 	"time"
 )
 
-const COUNT = 100000
+const COUNT = 1000
+
+func TestDeleteAll(t *testing.T) {
+	r := New(".")
+	defer r.Destory()
+
+	r.Insert("test", "test")
+	r.Insert("slow", "slow")
+	r.Insert("water", "water")
+	r.Insert("te", "test")
+	r.Insert("tester", "test")
+
+	r.Delete("te")
+	r.Delete("tester")
+	r.Delete("test")
+	r.Delete("slow")
+	r.Delete("water")
+
+	for _, d := range r.Root.Children {
+		t.Fatal("should be empty tree %+v", d)
+	}
+
+	println(r.Stats())
+}
 
 func TestInsertion(t *testing.T) {
 	r := New(".")
@@ -42,29 +65,6 @@ func TestInsertion(t *testing.T) {
 	}
 }
 
-func TestDeleteAll(t *testing.T) {
-	r := New(".")
-	defer r.Destory()
-
-	r.Insert("test", "test")
-	r.Insert("slow", "slow")
-	r.Insert("water", "water")
-	r.Insert("te", "test")
-	r.Insert("tester", "test")
-
-	r.Delete("te")
-	r.Delete("tester")
-	r.Delete("test")
-	r.Delete("slow")
-	r.Delete("water")
-
-	for _, d := range r.Root.Children {
-		t.Errorf("should be empty tree %+v", d)
-	}
-
-	println(r.Stats())
-}
-
 func TestRecursiveDelete(t *testing.T) {
 	r := New(".")
 	defer r.Destory()
@@ -82,6 +82,29 @@ func TestRecursiveDelete(t *testing.T) {
 	r.Delete("tes")
 	r.Delete("te")
 	r.Delete("t")
+
+	for _, d := range r.Root.Children {
+		t.Errorf("should be empty tree %+v", d)
+	}
+
+	println(r.Stats())
+}
+
+func TestRecursiveDeleteMany(t *testing.T) {
+	r := New(".")
+	defer r.Destory()
+
+	count := 1000
+
+	for i := 0; i < count; i++ {
+		str := fmt.Sprintf("%d", i)
+		r.Insert(str, str)
+	}
+
+	for i := 0; i < count; i++ {
+		str := fmt.Sprintf("%d", i)
+		r.Delete(str)
+	}
 
 	for _, d := range r.Root.Children {
 		t.Errorf("should be empty tree %+v", d)

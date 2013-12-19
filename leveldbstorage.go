@@ -8,7 +8,8 @@ import (
 )
 
 type Levelstorage struct {
-	db *leveldb.DB
+	currentBatch *leveldb.WriteBatch
+	db           *leveldb.DB
 }
 
 const LAST_SEQ_KEY = "##LAST_SEQ_KEY"
@@ -33,8 +34,37 @@ func (self *Levelstorage) Open(path string) (err error) {
 	return err
 }
 
+func (self *Levelstorage) BeginWriteBatch() error {
+	if self.currentBatch != nil {
+		log.Fatal("writebatch already exist")
+	}
+
+	self.currentBatch = leveldb.NewWriteBatch()
+	return nil
+}
+
+func (self *Levelstorage) CommitWriteBatch() error {
+	if self.currentBatch == nil {
+		log.Fatal("need to call BeginWriteBatch first")
+	}
+	err := self.db.Write(wo, self.currentBatch)
+	self.currentBatch.Close()
+	self.currentBatch = nil
+	return err
+}
+
+func (self *Levelstorage) Rollback() error {
+	if self.currentBatch == nil {
+		log.Fatal("need to call BeginWriteBatch first")
+	}
+	self.currentBatch.Close()
+	self.currentBatch = nil
+	return nil
+}
+
 func (self *Levelstorage) WriteNode(key string, value []byte) error {
-	return self.db.Put(wo, []byte(key), value)
+	self.currentBatch.Put([]byte(key), value)
+	return nil
 }
 
 func (self *Levelstorage) ReadNode(key string) ([]byte, error) {
@@ -42,7 +72,8 @@ func (self *Levelstorage) ReadNode(key string) ([]byte, error) {
 }
 
 func (self *Levelstorage) DelNode(key string) error {
-	return self.db.Delete(wo, []byte(key))
+	self.currentBatch.Delete([]byte(key))
+	return nil
 }
 
 func (self *Levelstorage) Close() error {
@@ -52,7 +83,8 @@ func (self *Levelstorage) Close() error {
 
 func (self *Levelstorage) SaveLastSeq(seq int64) error {
 	seqstr := strconv.FormatInt(seq, 10)
-	return self.db.Put(wo, []byte(LAST_SEQ_KEY), []byte(seqstr))
+	self.currentBatch.Put([]byte(LAST_SEQ_KEY), []byte(seqstr))
+	return nil
 }
 
 func (self *Levelstorage) GetLastSeq() (int64, error) {
@@ -65,11 +97,13 @@ func (self *Levelstorage) GetLastSeq() (int64, error) {
 }
 
 func (self *Levelstorage) DeleteKey(key string) error {
-	return self.db.Delete(wo, []byte(key))
+	self.currentBatch.Delete([]byte(key))
+	return nil
 }
 
 func (self *Levelstorage) PutKey(key string, value []byte) error {
-	return self.db.Put(wo, []byte(key), value)
+	self.currentBatch.Put([]byte(key), value)
+	return nil
 }
 
 func (self *Levelstorage) GetKey(key string) ([]byte, error) {

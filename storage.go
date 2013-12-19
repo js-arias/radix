@@ -2,6 +2,9 @@ package radix
 
 type Storage interface {
 	Open(path string) error
+	BeginWriteBatch() error
+	CommitWriteBatch() error
+	Rollback() error
 	ReadNode(seq string) ([]byte, error)
 	WriteNode(seq string, value interface{}) error
 	DelNode(seq string) error

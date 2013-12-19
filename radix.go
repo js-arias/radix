@@ -28,8 +28,8 @@ const (
 
 // Radix is a radix tree.
 type Radix struct {
-	Root *radNode   // Root of the radix tree
-	lock sync.Mutex // protect the radix
+	Root *radNode     // Root of the radix tree
+	lock sync.RWMutex // protect the radix
 	path string
 }
 
@@ -51,15 +51,22 @@ func New(path string) *Radix {
 		path: path + "/db",
 	}
 
+	rad.lock.Lock()
+	defer rad.lock.Unlock()
+
 	if err := store.Open(rad.path); err != nil {
 		log.Fatal(err)
 	}
 
+	rad.beginWriteBatch()
+
 	if err := getChildrenByNode(rad.Root); err != nil {
 		// log.Println(err)
 		persistentNode(*rad.Root, nil)
+		rad.commitWriteBatch()
 		log.Printf("root: %+v", rad.Root)
 	} else {
+		rad.rollback()
 		log.Printf("root: %+v", rad.Root)
 		startSeq, err = store.GetLastSeq()
 		if err != nil {
@@ -71,6 +78,9 @@ func New(path string) *Radix {
 }
 
 func (rad *Radix) Close() error {
+	rad.lock.Lock()
+	defer rad.lock.Unlock()
+
 	log.Println("close db")
 	return store.Close()
 }
@@ -80,6 +90,9 @@ func (rad *Radix) Stats() string {
 }
 
 func (rad *Radix) Destory() error {
+	rad.lock.Lock()
+	defer rad.lock.Unlock()
+
 	log.Println("Destory!")
 	store.Close()
 	os.RemoveAll(rad.path)
@@ -87,6 +100,9 @@ func (rad *Radix) Destory() error {
 }
 
 func (rad *Radix) DumpTree() error {
+	rad.lock.Lock()
+	defer rad.lock.Unlock()
+
 	if rad.Root == nil {
 		return nil
 	}
@@ -98,17 +114,44 @@ func (rad *Radix) DumpTree() error {
 	return nil
 }
 
+func (rad *Radix) beginWriteBatch() {
+	store.BeginWriteBatch()
+}
+
+func (rad *Radix) commitWriteBatch() error {
+	return store.CommitWriteBatch()
+}
+
+func (rad *Radix) rollback() error {
+	return store.Rollback()
+}
+
 // Delete removes the Value associated with a particular key and returns it.
 //todo: using transaction
 func (rad *Radix) Delete(key string) []byte {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
 
-	return rad.Root.delete(key)
+	// log.Println("delete", key)
+
+	rad.beginWriteBatch()
+	b := rad.Root.delete(key)
+	err := rad.commitWriteBatch()
+	if err != nil {
+		log.Fatal(err)
+		return nil
+	}
+
+	return b
 }
 
 func deleteNode(n *radNode) {
-	if n == nil || n.Seq == ROOT_SEQ {
+	if n == nil {
+		return
+	}
+
+	if n.Seq == ROOT_SEQ { //root
+		persistentNode(*n, nil)
 		return
 	}
 
@@ -135,10 +178,9 @@ func deleteNode(n *radNode) {
 
 	//now, n has no children, check if we need to clean father
 
-	//get index
 	//todo: binary search
 	i := 0
-	for ; i < len(n.father.Children); i++ {
+	for ; i < len(n.father.Children); i++ { //get index
 		if n.father.Children[i].Seq == n.Seq {
 			break
 		}
@@ -157,12 +199,12 @@ func deleteNode(n *radNode) {
 
 		persistentNode(*n.father, nil)
 		//todo: if there is only node after remove, we can do combine
-	} else if len(n.father.Children) == 1 { //todo: recursive find & delete
-		log.Println("recursive delete")
+	} else if len(n.father.Children) == 1 {
+		// log.Println("recursive delete")
 		n.father.Children = nil
 
 		if n.father.Value == nil {
-			deleteNode(n.father)
+			deleteNode(n.father) //recursive find & delete
 		} else {
 			persistentNode(*n.father, nil)
 		}
@@ -198,12 +240,26 @@ func (rad *Radix) Insert(key string, Value string) error {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
 
-	return rad.Root.insert(key, []byte(Value), key)
+	rad.beginWriteBatch()
+	err := rad.Root.insert(key, []byte(Value), key)
+	if err != nil {
+		log.Println(err)
+		rad.commitWriteBatch()
+		return err
+	}
+
+	err = rad.commitWriteBatch()
+	if err != nil {
+		log.Fatal(err)
+		return err
+	}
+
+	return nil
 }
 
 // implements insert
 func (r *radNode) insert(key string, Value []byte, orgKey string) error {
-	// log.Println("insert", key)
+	// log.Println("insert", orgKey)
 	if r.InDisk {
 		log.Printf("get %+v", r)
 		getChildrenByNode(r)
@@ -312,8 +368,8 @@ func (r *radNode) insert(key string, Value []byte, orgKey string) error {
 
 // Lookup searches for a particular string in the tree.
 func (rad *Radix) Lookup(key string) []byte {
-	rad.lock.Lock()
-	defer rad.lock.Unlock()
+	rad.lock.RLock()
+	defer rad.lock.RUnlock()
 
 	if x, _, ok := rad.Root.lookup(key); ok {
 		buf, err := GetValueFromStore(x.Value.(string))
@@ -328,8 +384,8 @@ func (rad *Radix) Lookup(key string) []byte {
 
 //todo: support marker & remove duplicate, see TestLookupByPrefixAndDelimiter_complex
 func (rad *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, limitCount int32, limitLevel int, marker string) *list.List {
-	rad.lock.Lock()
-	defer rad.lock.Unlock()
+	rad.lock.RLock()
+	defer rad.lock.RUnlock()
 
 	println("limitCount", limitCount)
 
@@ -346,8 +402,8 @@ func (rad *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, li
 
 // Prefix returns a list of elements that share a given prefix.
 func (rad *Radix) Prefix(prefix string) *list.List {
-	rad.lock.Lock()
-	defer rad.lock.Unlock()
+	rad.lock.RLock()
+	defer rad.lock.RUnlock()
 
 	l := list.New()
 	n, _, _ := rad.Root.lookup(prefix)
