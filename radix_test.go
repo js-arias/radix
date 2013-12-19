@@ -54,14 +54,67 @@ func TestInsertion(t *testing.T) {
 
 	r.Insert("te", "te")
 
-	if r.Insert("slow", "slow") == nil {
+	if _, err := r.Insert("slow", "slow"); err == nil {
 		t.Errorf("expecting error at insert")
 	}
-	if r.Insert("water", "water") == nil {
+	if _, err := r.Insert("water", "water"); err == nil {
 		t.Errorf("expecting error at insert")
 	}
-	if r.Insert("team", "team") == nil {
+	if _, err := r.Insert("team", "team"); err == nil {
 		t.Errorf("expecting error at insert")
+	}
+}
+
+func TestCas(t *testing.T) {
+	r := New(".")
+	defer r.Destory()
+
+	r.Insert("key", "value")
+	{
+		value, version := r.GetWithVersion("key")
+		if string(value) != "value" {
+			t.Error("value not match")
+		}
+
+		if version != 0 {
+			t.Error("version not match")
+		}
+	}
+
+	{
+		value, err := r.CAS("key", "xx", 0)
+		if err != nil {
+			t.Error(err)
+		}
+
+		if string(value) != "value" {
+			t.Error("value not match")
+		}
+
+		value, version := r.GetWithVersion("key")
+		if string(value) != "xx" {
+			t.Error("value not match")
+		}
+
+		if version != 1 {
+			t.Error("version not match")
+		}
+	}
+
+	{
+		value, err := r.CAS("key", "xx", 0)
+		if err == nil || value != nil {
+			t.Error("should raise error")
+		}
+	}
+
+	r.Insert("key1", "value1")
+	for i := 0; i < 100; i++ {
+		r.CAS("key1", "xx", int64(i))
+		_, version := r.GetWithVersion("key1")
+		if version != int64(i+1) {
+			t.Errorf("version not match %d - %d", i+1, version)
+		}
 	}
 }
 
