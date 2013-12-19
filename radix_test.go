@@ -61,6 +61,56 @@ func TestDeleteAll(t *testing.T) {
 	for _, d := range r.Root.Children {
 		t.Errorf("should be empty tree %+v", d)
 	}
+
+	println(r.Stats())
+}
+
+func TestRecursiveDelete(t *testing.T) {
+	r := New(".")
+	defer r.Destory()
+
+	r.Insert("t", "test")
+	r.Insert("te", "slow")
+	r.Insert("tes", "water")
+	r.Insert("test", "test")
+	r.Insert("teste", "test")
+	r.Insert("tester", "test")
+
+	r.Delete("tester")
+	r.Delete("teste")
+	r.Delete("test")
+	r.Delete("tes")
+	r.Delete("te")
+	r.Delete("t")
+
+	for _, d := range r.Root.Children {
+		t.Errorf("should be empty tree %+v", d)
+	}
+
+	println(r.Stats())
+}
+
+func TestRecursiveDelete1(t *testing.T) {
+	r := New(".")
+	defer r.Destory()
+
+	r.Insert("t", "test")
+	r.Insert("te", "slow")
+	r.Insert("tes", "water")
+	r.Insert("test", "test")
+	r.Insert("teste", "test")
+	r.Insert("tester", "test")
+
+	r.Delete("teste")
+	r.Delete("test")
+	r.Delete("tes")
+	r.Delete("te")
+	r.Delete("t")
+	r.Delete("tester")
+
+	for _, d := range r.Root.Children {
+		t.Errorf("should be empty tree %+v", d)
+	}
 }
 
 func TestDeleteDisk(t *testing.T) {

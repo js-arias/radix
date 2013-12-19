@@ -21,6 +21,11 @@ const (
 	ROOT_SEQ = -1
 )
 
+//todo:
+// version support
+// api
+// cut edge, limit count of nodes in memory
+
 // Radix is a radix tree.
 type Radix struct {
 	Root *radNode   // Root of the radix tree
@@ -68,6 +73,10 @@ func New(path string) *Radix {
 func (rad *Radix) Close() error {
 	log.Println("close db")
 	return store.Close()
+}
+
+func (rad *Radix) Stats() string {
+	return store.Stats()
 }
 
 func (rad *Radix) Destory() error {

@@ -11,4 +11,5 @@ type Storage interface {
 	Close() error
 	SaveLastSeq() error
 	GetLastSeq() (int64, error)
+	Stats() string
 }

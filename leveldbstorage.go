@@ -1,6 +1,7 @@
 package radix
 
 import (
+	"bytes"
 	leveldb "github.com/jmhodges/levigo"
 	"log"
 	"strconv"
@@ -73,4 +74,19 @@ func (self *Levelstorage) PutKey(key string, value []byte) error {
 
 func (self *Levelstorage) GetKey(key string) ([]byte, error) {
 	return self.db.Get(ro, []byte(key))
+}
+
+func (self *Levelstorage) Stats() string {
+	it := self.db.NewIterator(ro)
+	defer it.Close()
+	b := bytes.Buffer{}
+	it.SeekToFirst()
+	for ; it.Valid(); it.Next() {
+		b.WriteString(string(it.Key()))
+		b.WriteString("  ----> ")
+		b.WriteString(string(it.Value()))
+		b.WriteString("\n")
+	}
+
+	return b.String()
 }
