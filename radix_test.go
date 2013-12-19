@@ -42,6 +42,133 @@ func TestInsertion(t *testing.T) {
 	}
 }
 
+func TestDeleteAll(t *testing.T) {
+	r := New(".")
+	defer r.Destory()
+
+	r.Insert("test", "test")
+	r.Insert("slow", "slow")
+	r.Insert("water", "water")
+	r.Insert("te", "test")
+	r.Insert("tester", "test")
+
+	r.Delete("te")
+	r.Delete("tester")
+	r.Delete("test")
+	r.Delete("slow")
+	r.Delete("water")
+
+	for _, d := range r.Root.Children {
+		t.Errorf("should be empty tree %+v", d)
+	}
+}
+
+func TestDeleteDisk(t *testing.T) {
+	r := New(".")
+
+	println("***************************************************************************")
+
+	r.Insert("test", "test")
+	r.Insert("slow", "slow")
+	r.DumpTree()
+	r.Insert("water", "water")
+	r.DumpTree()
+	r.Insert("slower", "slower")
+	r.DumpTree()
+	r.Insert("tester", "tester")
+	r.DumpTree()
+	r.Insert("team", "team")
+	r.DumpTree()
+	r.Insert("toast", "toast")
+	r.DumpTree()
+	r.Insert("te", "te")
+
+	r.DumpTree()
+
+	if s := r.Lookup("tester"); s == nil {
+		t.Error("expecting non nil")
+	}
+
+	r.DumpTree()
+
+	if s := r.Delete("tester"); s != nil {
+		if string(s) != "tester" {
+			t.Errorf("expecting %s found %s", "tester", s)
+		}
+	}
+
+	println("after delete tester")
+
+	r.DumpTree()
+
+	r.Close()
+
+	r = New(".")
+
+	if s := r.Lookup("tester"); s != nil {
+		t.Error("expecting nil")
+	}
+
+	r.DumpTree()
+
+	if s := r.Delete("slow"); s != nil {
+		if string(s) != "slow" {
+			t.Errorf("expecting %s found %s", "slow", s)
+		}
+	}
+
+	println("after delete slow")
+
+	r.DumpTree()
+
+	r.Close()
+
+	r = New(".")
+
+	if s := r.Lookup("slower"); s == nil {
+		t.Error("expecting non nil")
+	}
+
+	if s := r.Delete("water"); s != nil {
+		if string(s) != "water" {
+			t.Errorf("expecting %s found %s", "water", s)
+		}
+	}
+
+	r.Close()
+	r = New(".")
+
+	println("after delete water")
+
+	r.DumpTree()
+	r.Close()
+
+	r = New(".")
+	defer r.Destory()
+
+	if s := r.Lookup("water"); s != nil {
+		t.Error("expecting nil")
+	}
+
+	if s := r.Delete("team"); s != nil {
+		if string(s) != "team" {
+			t.Errorf("expecting %s found %s", "team", s)
+		}
+	}
+	if s := r.Lookup("water"); s != nil {
+		t.Errorf("expecting nil found %v", s)
+	}
+
+	r.Insert("team", "tortugas")
+	if s := r.Lookup("team"); s != nil {
+		if string(s) != "tortugas" {
+			t.Errorf("expecting %s found %s", "tortugas", s)
+		}
+	}
+
+	println("***************************************************************************")
+}
+
 func TestLookupByPrefixAndDelimiter(t *testing.T) {
 	r := New(".")
 	defer r.Destory()
@@ -398,102 +525,6 @@ func TestDelete(t *testing.T) {
 			t.Errorf("expecting %s found %s", "tortugas", s)
 		}
 	}
-}
-
-func TestDeleteDisk(t *testing.T) {
-	r := New(".")
-
-	println("***************************************************************************")
-
-	r.Insert("test", "test")
-	r.Insert("slow", "slow")
-	r.Insert("water", "water")
-	r.Insert("slower", "slower")
-	r.Insert("tester", "tester")
-	r.Insert("team", "team")
-	r.Insert("toast", "toast")
-	r.Insert("te", "te")
-
-	r.DumpTree()
-
-	if s := r.Lookup("tester"); s == nil {
-		t.Error("expecting non nil")
-	}
-
-	if s := r.Delete("tester"); s != nil {
-		if string(s) != "tester" {
-			t.Errorf("expecting %s found %s", "tester", s)
-		}
-	}
-
-	println("after delete tester")
-
-	r.DumpTree()
-
-	r.Close()
-
-	r = New(".")
-
-	if s := r.Lookup("tester"); s != nil {
-		t.Error("expecting nil")
-	}
-
-	if s := r.Delete("slow"); s != nil {
-		if string(s) != "slow" {
-			t.Errorf("expecting %s found %s", "slow", s)
-		}
-	}
-
-	println("after delete slow")
-
-	r.DumpTree()
-
-	r.Close()
-
-	r = New(".")
-
-	if s := r.Lookup("slower"); s == nil {
-		t.Error("expecting non nil")
-	}
-
-	if s := r.Delete("water"); s != nil {
-		if string(s) != "water" {
-			t.Errorf("expecting %s found %s", "water", s)
-		}
-	}
-
-	r.Close()
-	r = New(".")
-
-	println("after delete water")
-
-	r.DumpTree()
-	r.Close()
-
-	r = New(".")
-	defer r.Destory()
-
-	if s := r.Lookup("water"); s != nil {
-		t.Error("expecting nil")
-	}
-
-	if s := r.Delete("team"); s != nil {
-		if string(s) != "team" {
-			t.Errorf("expecting %s found %s", "team", s)
-		}
-	}
-	if s := r.Lookup("water"); s != nil {
-		t.Errorf("expecting nil found %v", s)
-	}
-
-	r.Insert("team", "tortugas")
-	if s := r.Lookup("team"); s != nil {
-		if string(s) != "tortugas" {
-			t.Errorf("expecting %s found %s", "tortugas", s)
-		}
-	}
-
-	println("***************************************************************************")
 }
 
 func TestPrefix(t *testing.T) {

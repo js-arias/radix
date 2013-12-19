@@ -17,6 +17,10 @@ import (
 	"sync/atomic"
 )
 
+const (
+	ROOT_SEQ = -1
+)
+
 // Radix is a radix tree.
 type Radix struct {
 	Root *radNode   // Root of the radix tree
@@ -38,7 +42,7 @@ type radNode struct {
 func New(path string) *Radix {
 	log.Println("open db")
 	rad := &Radix{
-		Root: &radNode{Seq: -1},
+		Root: &radNode{Seq: ROOT_SEQ},
 		path: path + "/db",
 	}
 
@@ -47,7 +51,7 @@ func New(path string) *Radix {
 	}
 
 	if err := getChildrenByNode(rad.Root); err != nil {
-		log.Println(err)
+		// log.Println(err)
 		persistentNode(*rad.Root, nil)
 		log.Printf("root: %+v", rad.Root)
 	} else {
@@ -95,9 +99,11 @@ func (rad *Radix) Delete(key string) []byte {
 }
 
 func deleteNode(n *radNode) {
-	if n == nil {
+	if n == nil || n.Seq == ROOT_SEQ {
 		return
 	}
+
+	// log.Println(n.Seq, n.father.Seq)
 
 	//remove from storage
 	if n.Value != nil {
@@ -109,6 +115,7 @@ func deleteNode(n *radNode) {
 	}
 
 	if len(n.Children) > 0 {
+		// log.Println(n.Seq, n.father.Seq)
 		err := persistentNode(*n, nil)
 		if err != nil {
 			log.Fatal(err)
@@ -128,14 +135,21 @@ func deleteNode(n *radNode) {
 		}
 	}
 
+	delNodeFromStorage(n.Seq)
+
 	//n is leaf node
 	if len(n.father.Children) > 1 {
-		delNodeFromStorage(n.Seq)
-		n.father.Children = append(n.father.Children[:i], n.father.Children[i+1:]...)
+		if i == len(n.father.Children)-1 { //last one
+			n.father.Children[i] = nil
+			n.father.Children = n.father.Children[:i]
+		} else {
+			n.father.Children = append(n.father.Children[:i], n.father.Children[i+1:]...)
+		}
+
 		persistentNode(*n.father, nil)
 		//todo: if there is only node after remove, we can do combine
 	} else if len(n.father.Children) == 1 { //todo: recursive find & delete
-		delNodeFromStorage(n.Seq)
+		log.Println("recursive delete")
 		n.father.Children = nil
 
 		if n.father.Value == nil {
@@ -144,19 +158,21 @@ func deleteNode(n *radNode) {
 			persistentNode(*n.father, nil)
 		}
 	} else {
+		log.Println(n.Seq, n.father.Seq)
 		panic("never happend")
 	}
 }
 
 // implements delete
 func (r *radNode) delete(key string) []byte {
-	if x, father, _, ok := r.lookup(key); ok {
+	if x, _, ok := r.lookup(key); ok {
 		v, err := GetValueFromStore(x.Value.(string))
 		if err != nil {
 			log.Fatal("never happend")
 		}
 
-		log.Printf("delete %s father %+v", key, father)
+		// log.Printf("delete %s father %+v", key, father)
+		// log.Printf("delete %v father %v", x.Seq, father.Seq)
 
 		deleteNode(x)
 
@@ -202,7 +218,7 @@ func (r *radNode) insert(key string, Value []byte, orgKey string) error {
 		if len(comm) == len(key) {
 			if len(comm) == len(d.Prefix) {
 				if d.Value == nil {
-					log.Printf("set seq %d %s value", d.Seq, Value)
+					// log.Printf("set seq %d %s value", d.Seq, Value)
 					d.Value = orgKey
 					persistentNode(*d, Value)
 					return nil
@@ -212,13 +228,16 @@ func (r *radNode) insert(key string, Value []byte, orgKey string) error {
 			}
 
 			//ex: ab, insert a
-
 			n := &radNode{
 				Prefix:   d.Prefix[len(comm):],
 				Value:    d.Value,
 				father:   d,
 				Children: d.Children,
 				Seq:      AllocSeq(),
+			}
+			//adjust father
+			for _, x := range n.Children {
+				x.father = n
 			}
 
 			persistentNode(*n, nil)
@@ -231,18 +250,22 @@ func (r *radNode) insert(key string, Value []byte, orgKey string) error {
 			return nil
 		}
 
+		//ex: a, insert ab
 		if len(comm) == len(d.Prefix) {
 			return d.insert(key[len(comm):], Value, orgKey)
 		}
 
 		//ex: ab, insert ac, extra common a
-
 		p := &radNode{
 			Prefix:   d.Prefix[len(comm):],
 			Value:    d.Value,
 			father:   d,
 			Children: d.Children,
 			Seq:      AllocSeq(),
+		}
+		//adjust father
+		for _, x := range p.Children {
+			x.father = p
 		}
 
 		persistentNode(*p, nil)
@@ -283,7 +306,7 @@ func (rad *Radix) Lookup(key string) []byte {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
 
-	if x, _, _, ok := rad.Root.lookup(key); ok {
+	if x, _, ok := rad.Root.lookup(key); ok {
 		buf, err := GetValueFromStore(x.Value.(string))
 		if err != nil {
 			return nil
@@ -301,7 +324,7 @@ func (rad *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, li
 
 	println("limitCount", limitCount)
 
-	node, _, _, _ := rad.Root.lookup(prefix)
+	node, _, _ := rad.Root.lookup(prefix)
 	if node == nil {
 		return list.New()
 	}
@@ -318,7 +341,7 @@ func (rad *Radix) Prefix(prefix string) *list.List {
 	defer rad.lock.Unlock()
 
 	l := list.New()
-	n, _, _, _ := rad.Root.lookup(prefix)
+	n, _, _ := rad.Root.lookup(prefix)
 	if n == nil {
 		return l
 	}
@@ -436,11 +459,11 @@ L:
 	return moreCompleteList
 }
 
-// implementats lookup: node, father, index, exist
-func (r *radNode) lookup(key string) (*radNode, *radNode, int, bool) {
+// implementats lookup: node, index, exist
+func (r *radNode) lookup(key string) (*radNode, int, bool) {
 	if r.InDisk {
 		getChildrenByNode(r)
-		log.Printf("get from disk %+v, searching %s", r, key)
+		// log.Printf("get from disk %+v, searching %s", r, key)
 	}
 
 	// log.Println("lookup", key)
@@ -448,7 +471,7 @@ func (r *radNode) lookup(key string) (*radNode, *radNode, int, bool) {
 	for i, d := range r.Children {
 		if d.InDisk {
 			getChildrenByNode(d)
-			log.Printf("get from disk %+v, searching %s", d, key)
+			// log.Printf("get from disk %+v, searching %s", d, key)
 		}
 
 		comm := common(key, d.Prefix)
@@ -458,14 +481,14 @@ func (r *radNode) lookup(key string) (*radNode, *radNode, int, bool) {
 		// The key is found
 		if len(comm) == len(key) {
 			if len(comm) == len(d.Prefix) {
-				log.Println("found", d.Value)
-				return d, r, i, true
+				// log.Println("found", d.Value)
+				return d, i, true
 			}
-			return d, nil, i, false
+			return d, i, false
 		}
 		return d.lookup(key[len(comm):])
 	}
-	return nil, nil, 0, false
+	return nil, 0, false
 }
 
 // return the common string
