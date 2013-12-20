@@ -10,9 +10,11 @@ import (
 
 // Radix is a radix tree.
 type Radix struct {
-	Root *radNode     // Root of the radix tree
-	lock sync.RWMutex // protect the radix
-	path string
+	Root                 *radNode     // Root of the radix tree
+	lock                 sync.RWMutex // protect the radix
+	path                 string
+	MaxInMemoryNodeCount int64
+	h                    *helper
 }
 
 const (
@@ -23,14 +25,16 @@ const (
 func New(path string) *Radix {
 	log.Println("open db")
 	rad := &Radix{
-		Root: &radNode{Seq: ROOT_SEQ, InDisk: true},
+		Root: &radNode{
+			Seq: ROOT_SEQ, InDisk: true},
 		path: path + "/db",
+		h:    &helper{store: &Levelstorage{}, startSeq: ROOT_SEQ},
 	}
 
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
 
-	if err := store.Open(rad.path); err != nil {
+	if err := rad.h.store.Open(rad.path); err != nil {
 		log.Fatal(err)
 	}
 
@@ -38,16 +42,16 @@ func New(path string) *Radix {
 
 	rad.beginWriteBatch()
 
-	if err := getChildrenByNode(rad.Root); err != nil {
+	if err := rad.h.getChildrenByNode(rad.Root); err != nil {
 		// log.Println(err)
-		persistentNode(*rad.Root, nil)
+		rad.h.persistentNode(*rad.Root, nil)
 		rad.commitWriteBatch()
 		log.Printf("root: %+v", rad.Root)
 	} else {
 		rad.rollback()
 		rad.Root.InDisk = false
 		log.Printf("root: %+v", rad.Root)
-		startSeq, err = store.GetLastSeq()
+		_, err = rad.h.store.GetLastSeq()
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -56,53 +60,81 @@ func New(path string) *Radix {
 	return rad
 }
 
-func (rad *Radix) Close() error {
-	rad.lock.Lock()
-	defer rad.lock.Unlock()
+func (self *Radix) addCallBack() {
+	if self.h.GetInMemoryNodeCount() > self.MaxInMemoryNodeCount {
+		log.Println("need cutEdge", "current count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
+		log.Println("tree mem dump")
+		self.h.DumpMemNode(self.Root, 0)
 
-	log.Println("close db")
-	return store.Close()
+		cutEdge(self.Root, self)
+		log.Printf("%+v", self.Root)
+		log.Println("left count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
+	}
 }
 
-func (rad *Radix) Stats() string {
-	return store.Stats()
+func (self *Radix) cleanup() error {
+	self.h.ResetInMemoryNodeCount()
+	return self.h.store.Close()
 }
 
-func (rad *Radix) Destory() error {
-	rad.lock.Lock()
-	defer rad.lock.Unlock()
+func (self *Radix) Close() error {
+	self.lock.Lock()
+	defer self.lock.Unlock()
+
+	return self.cleanup()
+}
+
+func (self *Radix) Stats() string {
+	return self.h.store.Stats()
+}
+
+func (self *Radix) Destory() error {
+	self.lock.Lock()
+	defer self.lock.Unlock()
 
 	log.Println("Destory!")
-	store.Close()
-	os.RemoveAll(rad.path)
+	self.cleanup()
+	os.RemoveAll(self.path)
 	return nil
 }
 
-func (rad *Radix) DumpTree() error {
-	rad.lock.Lock()
-	defer rad.lock.Unlock()
+func (self *Radix) DumpTree() error {
+	self.lock.Lock()
+	defer self.lock.Unlock()
 
-	if rad.Root == nil {
+	log.Println("dump tree:")
+	if self.Root == nil {
 		return nil
 	}
 
-	log.Println("dump tree:")
-
-	DumpNode(rad.Root, 0)
+	self.h.DumpNode(self.Root, 0)
 
 	return nil
+}
+
+func (self *Radix) DumpMemTree() {
+	self.lock.Lock()
+	defer self.lock.Unlock()
+
+	log.Println("dump mem tree:")
+
+	if self.Root == nil {
+		return
+	}
+
+	self.h.DumpMemNode(self.Root, 0)
 }
 
 // Delete removes the Value associated with a particular key and returns it.
 //todo: using transaction
-func (rad *Radix) Delete(key string) []byte {
-	rad.lock.Lock()
-	defer rad.lock.Unlock()
+func (self *Radix) Delete(key string) []byte {
+	self.lock.Lock()
+	defer self.lock.Unlock()
 
 	// log.Println("delete", key)
-	rad.beginWriteBatch()
-	b := rad.Root.delete(key)
-	err := rad.commitWriteBatch()
+	self.beginWriteBatch()
+	b := self.Root.delete(key, self)
+	err := self.commitWriteBatch()
 	if err != nil {
 		log.Fatal(err)
 		return nil
@@ -114,9 +146,9 @@ func (rad *Radix) Delete(key string) []byte {
 // Insert put a Value in the radix. It returns an error if the given key
 // is already in use.
 //todo: using transaction(batch write)
-func (rad *Radix) Insert(key string, Value string) ([]byte, error) {
-	rad.lock.Lock()
-	defer rad.lock.Unlock()
+func (self *Radix) Insert(key string, Value string) ([]byte, error) {
+	self.lock.Lock()
+	defer self.lock.Unlock()
 
 	start := time.Now()
 	defer func() {
@@ -125,84 +157,92 @@ func (rad *Radix) Insert(key string, Value string) ([]byte, error) {
 		}
 	}()
 
-	rad.beginWriteBatch()
-	oldvalue, err := rad.Root.put(key, []byte(Value), key, invalid_version, false)
+	self.beginWriteBatch()
+	oldvalue, err := self.Root.put(key, []byte(Value), key, invalid_version, false, self)
 	if err != nil {
 		log.Println(err)
-		rad.commitWriteBatch()
+		self.commitWriteBatch()
 		return nil, err
 	}
 
-	err = rad.commitWriteBatch()
+	err = self.commitWriteBatch()
 	if err != nil {
 		log.Fatal(err)
 		return nil, err
 	}
+
+	self.addCallBack()
 
 	return oldvalue, nil
 }
 
-func (rad *Radix) CAS(key string, Value string, version int64) ([]byte, error) {
-	rad.lock.Lock()
-	defer rad.lock.Unlock()
+func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) {
+	self.lock.Lock()
+	defer self.lock.Unlock()
 
-	rad.beginWriteBatch()
-	oldvalue, err := rad.Root.put(key, []byte(Value), key, version, false)
+	self.beginWriteBatch()
+	oldvalue, err := self.Root.put(key, []byte(Value), key, version, false, self)
 	if err != nil {
 		log.Println(err)
-		rad.commitWriteBatch()
+		self.commitWriteBatch()
 		return nil, err
 	}
 
-	err = rad.commitWriteBatch()
+	err = self.commitWriteBatch()
 	if err != nil {
 		log.Fatal(err)
 		return nil, err
 	}
+
+	self.addCallBack()
 
 	return oldvalue, nil
 }
 
 // Lookup searches for a particular string in the tree.
-func (rad *Radix) Lookup(key string) []byte {
-	rad.lock.RLock()
-	defer rad.lock.RUnlock()
+func (self *Radix) Lookup(key string) []byte {
+	self.lock.RLock()
+	defer self.lock.RUnlock()
 
-	if x, _, ok := rad.Root.lookup(key); ok {
-		buf, err := GetValueFromStore(x.Value)
+	if x, _, ok := self.Root.lookup(key, self); ok {
+		buf, err := self.h.GetValueFromStore(x.Value)
 		if err != nil {
 			return nil
 		}
 		return buf
 	}
 
+	self.addCallBack()
+
 	return nil
 }
 
 // Lookup searches for a particular string in the tree.
-func (rad *Radix) GetWithVersion(key string) ([]byte, int64) {
-	rad.lock.RLock()
-	defer rad.lock.RUnlock()
+func (self *Radix) GetWithVersion(key string) ([]byte, int64) {
+	self.lock.RLock()
+	defer self.lock.RUnlock()
 
-	if x, _, ok := rad.Root.lookup(key); ok {
-		buf, err := GetValueFromStore(x.Value)
+	if x, _, ok := self.Root.lookup(key, self); ok {
+		buf, err := self.h.GetValueFromStore(x.Value)
 		if err != nil {
 			return nil, 0
 		}
 		return buf, x.Version
 	}
 
+	self.addCallBack()
+
 	return nil, 0
 }
 
 //todo: support marker & remove duplicate, see TestLookupByPrefixAndDelimiter_complex
-func (rad *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, limitCount int32, limitLevel int, marker string) *list.List {
-	rad.lock.RLock()
-	defer rad.lock.RUnlock()
+func (self *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, limitCount int32, limitLevel int, marker string) *list.List {
+	self.lock.RLock()
+	defer self.lock.RUnlock()
 
 	println("limitCount", limitCount)
 
-	node, _, _ := rad.Root.lookup(prefix)
+	node, _, _ := self.Root.lookup(prefix, self)
 	if node == nil {
 		return list.New()
 	}
@@ -210,19 +250,30 @@ func (rad *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, li
 
 	var currentCount int32
 
-	return node.getFirstByDelimiter(marker, delimiter, limitCount, limitLevel, &currentCount)
+	l := node.getFirstByDelimiter(marker, delimiter, limitCount, limitLevel, &currentCount, self)
+	self.addCallBack()
+
+	return l
 }
 
 // Prefix returns a list of elements that share a given prefix.
-func (rad *Radix) Prefix(prefix string) *list.List {
-	rad.lock.RLock()
-	defer rad.lock.RUnlock()
+func (self *Radix) Prefix(prefix string) *list.List {
+	self.lock.RLock()
+	defer self.lock.RUnlock()
 
 	l := list.New()
-	n, _, _ := rad.Root.lookup(prefix)
+	n, _, _ := self.Root.lookup(prefix, self)
 	if n == nil {
 		return l
 	}
 	n.addToList(l)
+	self.addCallBack()
 	return l
+}
+
+func (self *Radix) SetMaxInMemoryNodeCount(count int64) {
+	self.lock.RLock()
+	defer self.lock.RUnlock()
+
+	self.MaxInMemoryNodeCount = count
 }

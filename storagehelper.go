@@ -7,24 +7,28 @@ import (
 	"log"
 	"strconv"
 	"sync"
+	"sync/atomic"
 )
 
-var startSeq int64 = ROOT_SEQ
-var store = &Levelstorage{} //todo: let call to register storage
-var loadmu sync.Mutex
+type helper struct {
+	store             Storage
+	loadmu            sync.Mutex
+	inmemoryNodeCount int64
+	startSeq          int64
+}
 
-func allocSeq() int64 {
-	startSeq = startSeq + 1
-	err := store.SaveLastSeq(startSeq)
+func (self *helper) allocSeq() int64 {
+	self.startSeq += 1
+	err := self.store.SaveLastSeq(self.startSeq)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	// log.Println("alloc seq", seq)
-	return startSeq
+	return self.startSeq
 }
 
-func persistentNode(n radNode, value []byte) error {
+func (self *helper) persistentNode(n radNode, value []byte) error {
 	children := n.cloneChildren()
 
 	seq := strconv.FormatInt(n.Seq, 10)
@@ -36,14 +40,14 @@ func persistentNode(n radNode, value []byte) error {
 		return err
 	}
 
-	// log.Println("persistentNode", n.Value, string(buf))
-	if err = store.WriteNode(seq, buf); err != nil {
+	log.Println("persistentNode", n.Value, string(buf))
+	if err = self.store.WriteNode(seq, buf); err != nil {
 		log.Fatal(err)
 	}
 
 	if len(n.Value) > 0 && value != nil { //key exist
 		// log.Println("putkey", n.Value, string(value))
-		if err = store.PutKey(n.Value, value); err != nil {
+		if err = self.store.PutKey(n.Value, value); err != nil {
 			log.Fatal(err)
 			return err
 		}
@@ -52,9 +56,9 @@ func persistentNode(n radNode, value []byte) error {
 	return nil
 }
 
-func delNodeFromStorage(seq int64) error {
+func (self *helper) delNodeFromStorage(seq int64) error {
 	seqStr := strconv.FormatInt(seq, 10)
-	if err := store.DelNode(seqStr); err != nil {
+	if err := self.store.DelNode(seqStr); err != nil {
 		log.Fatal(err)
 		return err
 	}
@@ -62,8 +66,8 @@ func delNodeFromStorage(seq int64) error {
 	return nil
 }
 
-func delFromStoragebyKey(key string) error {
-	err := store.DeleteKey(key)
+func (self *helper) delFromStoragebyKey(key string) error {
+	err := self.store.DeleteKey(key)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -71,13 +75,25 @@ func delFromStoragebyKey(key string) error {
 	return err
 }
 
-func GetValueFromStore(key string) ([]byte, error) {
-	return store.GetKey(key)
+func (self *helper) AddInMemoryNodeCount(n int) {
+	atomic.AddInt64(&self.inmemoryNodeCount, int64(n))
 }
 
-func getChildrenByNode(n *radNode) error {
-	loadmu.Lock() //todo: using seq and hashring to make lock less heivy
-	defer loadmu.Unlock()
+func (self *helper) GetInMemoryNodeCount() int64 {
+	return atomic.LoadInt64(&self.inmemoryNodeCount)
+}
+
+func (self *helper) ResetInMemoryNodeCount() {
+	atomic.StoreInt64(&self.inmemoryNodeCount, 0)
+}
+
+func (self *helper) GetValueFromStore(key string) ([]byte, error) {
+	return self.store.GetKey(key)
+}
+
+func (self *helper) getChildrenByNode(n *radNode) error {
+	self.loadmu.Lock() //todo: using seq and hashring to make lock less heivy
+	defer self.loadmu.Unlock()
 
 	if !n.InDisk { //check if multithread loading the same node
 		return nil
@@ -92,7 +108,7 @@ func getChildrenByNode(n *radNode) error {
 	father := n.father
 	seq := n.Seq
 	seqstr := strconv.FormatInt(n.Seq, 10)
-	buf, err := store.ReadNode(seqstr)
+	buf, err := self.store.ReadNode(seqstr)
 	if err != nil {
 		log.Println(err, n.Seq)
 		return err
@@ -106,6 +122,8 @@ func getChildrenByNode(n *radNode) error {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	self.AddInMemoryNodeCount(len(n.Children))
 
 	n.father = father
 	for _, x := range n.Children {
@@ -135,13 +153,45 @@ func (r *radNode) cloneChildren() []*radNode {
 	return nodes
 }
 
-func DumpNode(node *radNode, level int) error {
+func (self *helper) DumpNode(node *radNode, level int) error {
+	if node == nil {
+		return nil
+	}
+
+	loadFromDisk := false
+
+	if node.InDisk {
+		self.getChildrenByNode(node)
+		// log.Printf("load: %+v", node)
+		loadFromDisk = true
+	}
+
+	emptyPrefix := ""
+	for i := 0; i < level; i++ {
+		emptyPrefix += "    "
+	}
+
+	for _, n := range node.Children {
+		//check
+		if n.father.Seq != node.Seq {
+			log.Println(node.Seq, n.father.Seq, n.Seq)
+			panic("relation not match")
+		}
+
+		fmt.Printf("%s %s, value: %s, seq:%v, father:%v, loadFromDisk:%v\n", emptyPrefix, n.Prefix, n.Value, n.Seq, n.father.Seq, loadFromDisk)
+		self.DumpNode(n, level+1)
+	}
+
+	return nil
+}
+
+func (self *helper) DumpMemNode(node *radNode, level int) error {
 	if node == nil {
 		return nil
 	}
 
 	if node.InDisk {
-		getChildrenByNode(node)
+		return nil
 	}
 
 	emptyPrefix := ""
@@ -157,7 +207,7 @@ func DumpNode(node *radNode, level int) error {
 		}
 
 		fmt.Printf("%s %s, value: %s, seq:%v, father:%v\n", emptyPrefix, n.Prefix, n.Value, n.Seq, n.father.Seq)
-		DumpNode(n, level+1)
+		self.DumpNode(n, level+1)
 	}
 
 	return nil
