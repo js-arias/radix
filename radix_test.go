@@ -12,7 +12,11 @@ import (
 	"time"
 )
 
-const COUNT = 1000
+const COUNT = 1000000
+
+var _ = bytes.HasPrefix
+var _ = fmt.Scan
+var _ = time.Now
 
 func TestDeleteAll(t *testing.T) {
 	r := New(".")
@@ -45,7 +49,7 @@ func TestInsertion(t *testing.T) {
 	r.Insert("slow", "slow")
 	r.Insert("water", "water")
 	for _, d := range r.Root.Children {
-		if s := d.Value; s != d.Prefix {
+		if s := d.Value; decodeValueToKey(s) != d.Prefix {
 			t.Errorf("d.Value = %s, want %s", s, d.Prefix)
 		}
 	}
@@ -83,13 +87,14 @@ func TestCas(t *testing.T) {
 	}
 
 	{
+		// log.Println("test cas")
 		value, err := r.CAS("key", "xx", 0)
 		if err != nil {
 			t.Error(err)
 		}
 
-		if string(value) != "value" {
-			t.Error("value not match")
+		if value == nil || string(value) != "value" {
+			t.Error("value not match", value)
 		}
 
 		value, version := r.GetWithVersion("key")
@@ -103,6 +108,7 @@ func TestCas(t *testing.T) {
 	}
 
 	{
+		// log.Println("test cas should return error")
 		value, err := r.CAS("key", "xx", 0)
 		if err == nil || value != nil {
 			t.Error("should raise error")
@@ -432,6 +438,9 @@ func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 	for i := 0; i < COUNT; i++ {
 		key := fmt.Sprintf("2013/%d", i)
 		r.Insert(key, "")
+		if i%10000 == 0 {
+			print(".")
+		}
 	}
 	log.Println("Insert", COUNT, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
 	r.Close()
@@ -475,6 +484,9 @@ func TestLookupByPrefixAndDelimiter_complex_many_bigkey(t *testing.T) {
 	for i := 0; i < COUNT; i++ {
 		key := fmt.Sprintf("2013/%d", i)
 		r.Insert(key+buf, string(b.Bytes()))
+		if i%10000 == 0 {
+			print(".")
+		}
 	}
 
 	r.Close()

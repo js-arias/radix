@@ -16,7 +16,8 @@ import (
 )
 
 const (
-	ROOT_SEQ = -1
+	ROOT_SEQ            = -1
+	INTERNAL_KEY_PREFIX = "k"
 )
 
 //todo:
@@ -135,7 +136,7 @@ func (r *radNode) delete(key string) []byte {
 
 // implements insert or replace, return nil, nil if this a new value
 func (r *radNode) put(key string, Value []byte, orgKey string, version int64, force bool) ([]byte, error) {
-	// log.Println("insert", orgKey)
+	// log.Println("insert", orgKey, "--", string(Value))
 	if r.InDisk {
 		log.Printf("get %+v", r)
 		getChildrenByNode(r)
@@ -159,13 +160,13 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 		if len(comm) == len(key) {
 			if len(comm) == len(d.Prefix) {
 				if len(d.Value) == 0 {
-					d.Value = orgKey
+					d.Value = encodeValueToInternalKey(orgKey)
 					persistentNode(*d, Value)
 					return nil, nil
 				}
 
 				if force || version == d.Version {
-					d.Value = orgKey
+					d.Value = encodeValueToInternalKey(orgKey)
 					orgValue, err := GetValueFromStore(d.Value)
 					if err != nil {
 						log.Fatal(err)
@@ -175,6 +176,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 					return orgValue, nil
 				}
 
+				// log.Printf("version not match, version is %d, but you provide %d", d.Version, version)
 				return nil, fmt.Errorf("version not match, version is %d, but you provide %d", d.Version, version)
 			}
 
@@ -196,7 +198,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 			d.Children = make([]*radNode, 1, 1)
 			d.Children[0] = n
 			d.Prefix = comm
-			d.Value = orgKey
+			d.Value = encodeValueToInternalKey(orgKey)
 			persistentNode(*d, Value)
 			return nil, nil
 		}
@@ -222,7 +224,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 		persistentNode(*p, nil)
 		n := &radNode{
 			Prefix: key[len(comm):],
-			Value:  orgKey,
+			Value:  encodeValueToInternalKey(orgKey),
 			father: d,
 			Seq:    AllocSeq(),
 		}
@@ -241,7 +243,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 
 	n := &radNode{
 		Prefix: key,
-		Value:  orgKey,
+		Value:  encodeValueToInternalKey(orgKey),
 		father: r,
 		Seq:    AllocSeq(),
 	}
@@ -255,7 +257,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 // add the content of a node and its Childrenendants to a list
 func (r *radNode) addToList(l *list.List) {
 	if len(r.Value) > 0 {
-		l.PushBack(r.Value)
+		l.PushBack(decodeValueToKey(r.Value))
 	}
 	for _, d := range r.Children {
 		d.addToList(l)
@@ -284,10 +286,6 @@ func save(l *list.List, str string, marker string, value interface{}, limitCount
 
 func (r *radNode) getFirstByDelimiter(marker string, delimiter string, limitCount int32, limitLevel int, currentCount *int32) *list.List {
 	l := list.New()
-	// println("===> prefix: ", r.Prefix, "marker ", marker, "level: ", limitLevel)
-	// defer func() {
-	// 	println("exit level ", limitLevel)
-	// }()
 
 	if r.InDisk {
 		getChildrenByNode(r)
@@ -414,6 +412,10 @@ func common(s, o string) string {
 	return string(str)
 }
 
-func encodeValue(n *radNode, value string) {
+func encodeValueToInternalKey(value string) string {
+	return INTERNAL_KEY_PREFIX + value
+}
 
+func decodeValueToKey(value string) string {
+	return value[1:]
 }
