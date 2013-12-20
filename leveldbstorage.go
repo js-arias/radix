@@ -111,9 +111,11 @@ func (self *Levelstorage) GetKey(key string) ([]byte, error) {
 }
 
 func (self *Levelstorage) Stats() string {
+	b := bytes.Buffer{}
+	b.WriteString("storage stats:\n")
 	it := self.db.NewIterator(ro)
 	defer it.Close()
-	b := bytes.Buffer{}
+
 	it.SeekToFirst()
 	for ; it.Valid(); it.Next() {
 		b.WriteString(string(it.Key()))

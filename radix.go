@@ -12,18 +12,13 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"sync/atomic"
-)
-
-const (
-	ROOT_SEQ            = -1
-	INTERNAL_KEY_PREFIX = "k"
 )
 
 //todo:
-// version support
 // api
 // cut edge, limit count of nodes in memory
+// gc performance test
+// read write lock, load from disk thread safe
 
 // a node of a radix tree
 type radNode struct {
@@ -186,7 +181,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 				Value:    d.Value,
 				father:   d,
 				Children: d.Children,
-				Seq:      AllocSeq(),
+				Seq:      allocSeq(),
 			}
 			//adjust father
 			for _, x := range n.Children {
@@ -214,7 +209,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 			Value:    d.Value,
 			father:   d,
 			Children: d.Children,
-			Seq:      AllocSeq(),
+			Seq:      allocSeq(),
 		}
 		//adjust father
 		for _, x := range p.Children {
@@ -226,7 +221,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 			Prefix: key[len(comm):],
 			Value:  encodeValueToInternalKey(orgKey),
 			father: d,
-			Seq:    AllocSeq(),
+			Seq:    allocSeq(),
 		}
 
 		persistentNode(*n, Value)
@@ -245,7 +240,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 		Prefix: key,
 		Value:  encodeValueToInternalKey(orgKey),
 		father: r,
-		Seq:    AllocSeq(),
+		Seq:    allocSeq(),
 	}
 	persistentNode(*n, Value)
 	r.Children = append(r.Children, n)
@@ -267,8 +262,7 @@ func (r *radNode) addToList(l *list.List) {
 //return: false if full
 func save(l *list.List, str string, marker string, value interface{}, limitCount int32, currentCount *int32, inc bool) bool {
 	if inc {
-		if atomic.LoadInt32(currentCount) >= limitCount {
-			println("full")
+		if *currentCount >= limitCount {
 			return false
 		}
 	}
@@ -277,7 +271,7 @@ func save(l *list.List, str string, marker string, value interface{}, limitCount
 		// println("add ", str)
 		l.PushBack(str)
 		if inc {
-			atomic.AddInt32(currentCount, 1)
+			*currentCount = *currentCount + 1
 		}
 	}
 
@@ -305,7 +299,6 @@ L:
 	for _, d := range r.Children {
 		//leaf or prefix include delimiter
 		// println("check ", d.Prefix, "marker ", marker)
-
 		if d.InDisk {
 			getChildrenByNode(d)
 		}
@@ -390,32 +383,4 @@ func (r *radNode) lookup(key string) (*radNode, int, bool) {
 		return d.lookup(key[len(comm):])
 	}
 	return nil, 0, false
-}
-
-// return the common string
-func common(s, o string) string {
-	max, min := s, o
-	if len(max) < len(min) {
-		max, min = min, max
-	}
-	var str []rune
-	for i, r := range min {
-		if r != rune(max[i]) {
-			break
-		}
-		if str == nil {
-			str = []rune{r}
-		} else {
-			str = append(str, r)
-		}
-	}
-	return string(str)
-}
-
-func encodeValueToInternalKey(value string) string {
-	return INTERNAL_KEY_PREFIX + value
-}
-
-func decodeValueToKey(value string) string {
-	return value[1:]
 }

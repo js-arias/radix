@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const COUNT = 1000000
+const COUNT = 10000
 
 var _ = bytes.HasPrefix
 var _ = fmt.Scan
