@@ -1,10 +1,3 @@
-// Copyright (c) 2013, J. Salvador Arias <jsalarias@csnat.unt.edu.ar>
-// All rights reserved.
-// Distributed under BSD2 license that can be found in the LICENSE file.
-
-// Package radix implement a radix tree. It is expected that the
-// keys are in UTF-8 (i.e. go runes), and that insertion and lookup
-// is far more common than deletion.
 package radix
 
 import (
@@ -18,7 +11,6 @@ import (
 // api
 // cut edge, limit count of nodes in memory
 // gc performance test
-// read write lock, load from disk thread safe
 
 // a node of a radix tree
 type radNode struct {
@@ -44,16 +36,12 @@ func (self *Radix) rollback() error {
 }
 
 func (self *Radix) deleteNode(n *radNode) {
-	if n == nil {
-		return
-	}
-
 	if n.Seq == ROOT_SEQ { //root
 		self.h.persistentNode(*n, nil)
 		return
 	}
 
-	// logging.Info(n.Seq, n.father.Seq)
+	logging.Infof("%v %v %+v", n.Seq, n.father.Seq, n)
 	//remove from storage
 	if len(n.Value) > 0 {
 		err := self.h.delFromStoragebyKey(n.Value)
@@ -64,7 +52,7 @@ func (self *Radix) deleteNode(n *radNode) {
 	}
 
 	if len(n.Children) > 0 {
-		// logging.Info(n.Seq, n.father.Seq)
+		logging.Info(n.Seq, n.father.Seq)
 		err := self.h.persistentNode(*n, nil)
 		if err != nil {
 			logging.Fatal(err)
@@ -108,7 +96,6 @@ func (self *Radix) deleteNode(n *radNode) {
 			self.h.persistentNode(*n.father, nil)
 		}
 	} else {
-		logging.Info(n.Seq, n.father.Seq)
 		panic("never happend")
 	}
 }
@@ -121,7 +108,7 @@ func (r *radNode) delete(key string, tree *Radix) []byte {
 			logging.Fatal("never happend")
 		}
 
-		// logging.Infof("delete %s father %+v", key, father)
+		// logging.Debugf("delete %s father %+v", key, x.father)
 		// logging.Infof("delete %v father %v", x.Seq, father.Seq)
 
 		tree.deleteNode(x)
@@ -145,9 +132,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 			checkprefix := d.Prefix
 			tree.h.getChildrenByNode(d)
 			if d.Prefix != checkprefix {
-				logging.Info("d.Prefix", d.Prefix, checkprefix)
-				panic("")
-				logging.Fatal("can't be")
+				logging.Fatal("d.Prefix", d.Prefix, checkprefix)
 			}
 		}
 
@@ -340,7 +325,7 @@ L:
 
 		// println("check delimiter ", d.Prefix, delimiter)
 		if pos := strings.Index(d.Prefix, delimiter); pos >= 0 {
-			println("delimiter ", delimiter, " found")
+			logging.Info("delimiter ", delimiter, " found")
 			if !save(l, d.Prefix[:pos+1], marker, true, limitCount, currentCount, true) {
 				break L
 			}
@@ -378,10 +363,10 @@ func (r *radNode) lookup(key string, tree *Radix) (*radNode, int, bool) {
 
 	logging.Info("lookup", key)
 	for i, d := range r.Children {
-		// if d.InDisk {	//if we need children, we need to load from disk
-		// 	tree.h.getChildrenByNode(d)
-		// 	logging.Infof("get from disk %+v, searching %s", d, key)
-		// }
+		if d.InDisk { //if we need children, we need to load from disk
+			tree.h.getChildrenByNode(d)
+			logging.Infof("get from disk %+v, searching %s", d, key)
+		}
 
 		comm := common(key, d.Prefix)
 		if len(comm) == 0 {
@@ -390,7 +375,7 @@ func (r *radNode) lookup(key string, tree *Radix) (*radNode, int, bool) {
 		// The key is found
 		if len(comm) == len(key) {
 			if len(comm) == len(d.Prefix) {
-				logging.Info("found", d.Value)
+				// logging.Info("found", d.Value)
 				return d, i, true
 			}
 			return d, i, false

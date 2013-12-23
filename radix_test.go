@@ -1,7 +1,3 @@
-// Copyright (c) 2013, J. Salvador Arias <jsalarias@csnat.unt.edu.ar>
-// All rights reserved.
-// Distributed under BSD2 license that can be found in the LICENSE file.
-
 package radix
 
 import (
@@ -12,7 +8,7 @@ import (
 	"time"
 )
 
-const COUNT = 1000
+const COUNT = 10000
 
 var _ = bytes.HasPrefix
 var _ = fmt.Scan
@@ -202,35 +198,47 @@ func TestRecursiveDelete1(t *testing.T) {
 	for _, d := range r.Root.Children {
 		t.Errorf("should be empty tree %+v", d)
 	}
+
+	if s := r.Lookup("t"); s != nil {
+		t.Error("expecting nil")
+	}
+
+	if s := r.Lookup("te"); s != nil {
+		t.Error("expecting nil")
+	}
+
+	if s := r.Lookup("tes"); s != nil {
+		t.Error("expecting nil")
+	}
+
+	if s := r.Lookup("test"); s != nil {
+		t.Error("expecting nil")
+	}
+
+	if s := r.Lookup("teste"); s != nil {
+		t.Error("expecting nil")
+	}
+
+	if s := r.Lookup("tester"); s != nil {
+		t.Error("expecting nil")
+	}
 }
 
 func TestDeleteDisk(t *testing.T) {
 	r := New(".")
 
-	log.Println("***************************************************************************")
-
 	r.Insert("test", "test")
 	r.Insert("slow", "slow")
-	r.DumpTree()
 	r.Insert("water", "water")
-	r.DumpTree()
 	r.Insert("slower", "slower")
-	r.DumpTree()
 	r.Insert("tester", "tester")
-	r.DumpTree()
 	r.Insert("team", "team")
-	r.DumpTree()
 	r.Insert("toast", "toast")
-	r.DumpTree()
 	r.Insert("te", "te")
-
-	r.DumpTree()
 
 	if s := r.Lookup("tester"); s == nil {
 		t.Error("expecting non nil")
 	}
-
-	r.DumpTree()
 
 	if s := r.Delete("tester"); s != nil {
 		if string(s) != "tester" {
@@ -240,8 +248,6 @@ func TestDeleteDisk(t *testing.T) {
 
 	log.Println("after delete tester")
 
-	r.DumpTree()
-
 	r.Close()
 
 	r = New(".")
@@ -250,8 +256,6 @@ func TestDeleteDisk(t *testing.T) {
 		t.Error("expecting nil")
 	}
 
-	r.DumpTree()
-
 	if s := r.Delete("slow"); s != nil {
 		if string(s) != "slow" {
 			t.Errorf("expecting %s found %s", "slow", s)
@@ -259,8 +263,7 @@ func TestDeleteDisk(t *testing.T) {
 	}
 
 	log.Println("after delete slow")
-
-	r.DumpTree()
+	log.Println(r.Stats())
 
 	r.Close()
 
@@ -306,8 +309,6 @@ func TestDeleteDisk(t *testing.T) {
 			t.Errorf("expecting %s found %s", "tortugas", s)
 		}
 	}
-
-	log.Println("***************************************************************************")
 }
 
 func TestLookupByPrefixAndDelimiter(t *testing.T) {
@@ -420,25 +421,20 @@ func TestLookupByPrefixAndDelimiter_limit_marker(t *testing.T) {
 	r.Insert("test123/2", "")
 	r.Insert("test123//2", "")
 
-	log.Println("---------------------------")
 	l := r.LookupByPrefixAndDelimiter("t", "/", 5, 100, "test")
 	if l.Len() != 3 {
 		t.Errorf("should got 3, but we got %d", l.Len())
-		log.Println("================================")
 		for v := l.Front(); v != nil; v = v.Next() {
 			log.Println(v.Value)
 		}
-		log.Println("---------------------------")
 	}
 
 	l = r.LookupByPrefixAndDelimiter("t", "/", 5, 100, "te")
 	if l.Len() != 5 {
 		t.Errorf("should got 5, but we got %d", l.Len())
-		log.Println("================================")
 		for v := l.Front(); v != nil; v = v.Next() {
 			log.Println(v.Value)
 		}
-		log.Println("---------------------------")
 	}
 }
 
@@ -542,7 +538,7 @@ func TestLookup(t *testing.T) {
 	r.Insert("team", "team")
 	r.Insert("toast", "toast")
 	r.Insert("te", "te")
-	log.Println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
+
 	if s := r.Lookup("tester"); s != nil {
 		if string(s) != "tester" {
 			t.Errorf("expecting %s found %s", "tester", s)
@@ -737,5 +733,10 @@ func TestPrefix(t *testing.T) {
 	}
 	if s := l.Front().Value.(string); s != "slower" {
 		t.Errorf("unexpected element in list %s", s)
+	}
+
+	l = r.Prefix("x")
+	if l.Len() != 0 {
+		t.Error("should be zero")
 	}
 }

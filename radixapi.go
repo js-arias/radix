@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"github.com/ngaut/logging"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -32,7 +33,7 @@ func New(path string) *Radix {
 	rad := &Radix{
 		Root: &radNode{
 			Seq: ROOT_SEQ, InDisk: true},
-		path: path + "/db",
+		path: filepath.Join(path, "/db"),
 		h:    &helper{store: &Levelstorage{}, startSeq: ROOT_SEQ},
 	}
 
@@ -62,7 +63,7 @@ func New(path string) *Radix {
 		}
 	}
 
-	rad.MaxInMemoryNodeCount = 1
+	rad.MaxInMemoryNodeCount = 0
 
 	return rad
 }
@@ -152,7 +153,6 @@ func (self *Radix) Delete(key string) []byte {
 
 // Insert put a Value in the radix. It returns an error if the given key
 // is already in use.
-//todo: using transaction(batch write)
 func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 	self.lock.Lock()
 	defer self.lock.Unlock()
@@ -242,12 +242,11 @@ func (self *Radix) GetWithVersion(key string) ([]byte, int64) {
 	return nil, 0
 }
 
-//todo: support marker & remove duplicate, see TestLookupByPrefixAndDelimiter_complex
 func (self *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, limitCount int32, limitLevel int, marker string) *list.List {
 	self.lock.RLock()
 	defer self.lock.RUnlock()
 
-	println("limitCount", limitCount)
+	logging.Info("limitCount", limitCount)
 
 	node, _, _ := self.Root.lookup(prefix, self)
 	if node == nil {

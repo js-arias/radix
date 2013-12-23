@@ -174,7 +174,7 @@ func (self *helper) DumpNode(node *radNode, level int) error {
 	for _, n := range node.Children {
 		//check
 		if n.father.Seq != node.Seq {
-			log.Println(node.Seq, n.father.Seq, n.Seq)
+			// log.Println(node.Seq, n.father.Seq, n.Seq)
 			panic("relation not match")
 		}
 
@@ -202,7 +202,7 @@ func (self *helper) DumpMemNode(node *radNode, level int) error {
 	for _, n := range node.Children {
 		//check
 		if n.father.Seq != node.Seq {
-			log.Println(node.Seq, n.father.Seq, n.Seq)
+			// log.Println(node.Seq, n.father.Seq, n.Seq)
 			panic("relation not match")
 		}
 
