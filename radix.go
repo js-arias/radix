@@ -10,7 +10,7 @@ package radix
 import (
 	"container/list"
 	"fmt"
-	"log"
+	"github.com/ngaut/logging"
 	"strings"
 )
 
@@ -53,21 +53,21 @@ func (self *Radix) deleteNode(n *radNode) {
 		return
 	}
 
-	// log.Println(n.Seq, n.father.Seq)
+	// logging.Info(n.Seq, n.father.Seq)
 	//remove from storage
 	if len(n.Value) > 0 {
 		err := self.h.delFromStoragebyKey(n.Value)
 		if err != nil {
-			log.Fatal(err)
+			logging.Fatal(err)
 		}
 		n.Value = ""
 	}
 
 	if len(n.Children) > 0 {
-		// log.Println(n.Seq, n.father.Seq)
+		// logging.Info(n.Seq, n.father.Seq)
 		err := self.h.persistentNode(*n, nil)
 		if err != nil {
-			log.Fatal(err)
+			logging.Fatal(err)
 		}
 
 		return
@@ -98,7 +98,7 @@ func (self *Radix) deleteNode(n *radNode) {
 		self.h.persistentNode(*n.father, nil)
 		//todo: if there is only node after remove, we can do combine
 	} else if len(n.father.Children) == 1 {
-		// log.Println("recursive delete")
+		// logging.Info("recursive delete")
 		n.father.Children = nil
 		self.h.AddInMemoryNodeCount(-1)
 
@@ -108,7 +108,7 @@ func (self *Radix) deleteNode(n *radNode) {
 			self.h.persistentNode(*n.father, nil)
 		}
 	} else {
-		log.Println(n.Seq, n.father.Seq)
+		logging.Info(n.Seq, n.father.Seq)
 		panic("never happend")
 	}
 }
@@ -118,11 +118,11 @@ func (r *radNode) delete(key string, tree *Radix) []byte {
 	if x, _, ok := r.lookup(key, tree); ok {
 		v, err := tree.h.GetValueFromStore(x.Value)
 		if err != nil {
-			log.Fatal("never happend")
+			logging.Fatal("never happend")
 		}
 
-		// log.Printf("delete %s father %+v", key, father)
-		// log.Printf("delete %v father %v", x.Seq, father.Seq)
+		// logging.Infof("delete %s father %+v", key, father)
+		// logging.Infof("delete %v father %v", x.Seq, father.Seq)
 
 		tree.deleteNode(x)
 
@@ -134,9 +134,9 @@ func (r *radNode) delete(key string, tree *Radix) []byte {
 
 // implements insert or replace, return nil, nil if this a new value
 func (r *radNode) put(key string, Value []byte, orgKey string, version int64, force bool, tree *Radix) ([]byte, error) {
-	// log.Println("insert", orgKey, "--", string(Value))
+	logging.Info("insert", orgKey, "--", string(Value))
 	if r.InDisk {
-		log.Printf("Load %+v", r)
+		logging.Infof("Load %+v", r)
 		tree.h.getChildrenByNode(r)
 	}
 
@@ -145,9 +145,9 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 			checkprefix := d.Prefix
 			tree.h.getChildrenByNode(d)
 			if d.Prefix != checkprefix {
-				log.Println("d.Prefix", d.Prefix, checkprefix)
+				logging.Info("d.Prefix", d.Prefix, checkprefix)
 				panic("")
-				log.Fatal("can't be")
+				logging.Fatal("can't be")
 			}
 		}
 
@@ -168,14 +168,15 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 					d.Value = encodeValueToInternalKey(orgKey)
 					orgValue, err := tree.h.GetValueFromStore(d.Value)
 					if err != nil {
-						log.Fatal(err)
+						logging.Fatal(err)
 					}
 					d.Version++
 					tree.h.persistentNode(*d, Value)
+					tree.h.persistentNode(*d.father, nil)
 					return orgValue, nil
 				}
 
-				// log.Printf("version not match, version is %d, but you provide %d", d.Version, version)
+				// logging.Infof("version not match, version is %d, but you provide %d", d.Version, version)
 				return nil, fmt.Errorf("version not match, version is %d, but you provide %d", d.Version, version)
 			}
 
@@ -200,6 +201,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 			d.Prefix = comm
 			d.Value = encodeValueToInternalKey(orgKey)
 			tree.h.persistentNode(*d, Value)
+			tree.h.persistentNode(*d.father, nil)
 			return nil, nil
 		}
 
@@ -240,6 +242,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 		d.Children[1] = n
 
 		tree.h.persistentNode(*d, nil)
+		tree.h.persistentNode(*d.father, nil)
 		return nil, nil
 	}
 
@@ -258,12 +261,17 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 }
 
 // add the content of a node and its Childrenendants to a list
-func (r *radNode) addToList(l *list.List) {
+func (r *radNode) addToList(l *list.List, tree *Radix) {
+	if r.InDisk {
+		tree.h.getChildrenByNode(r)
+	}
+	logging.Infof("checking %+v", r)
 	if len(r.Value) > 0 {
+		logging.Info("push", r.Value)
 		l.PushBack(decodeValueToKey(r.Value))
 	}
 	for _, d := range r.Children {
-		d.addToList(l)
+		d.addToList(l, tree)
 	}
 }
 
@@ -365,15 +373,15 @@ L:
 func (r *radNode) lookup(key string, tree *Radix) (*radNode, int, bool) {
 	if r.InDisk {
 		tree.h.getChildrenByNode(r)
-		// log.Printf("get from disk %+v, searching %s", r, key)
+		// logging.Infof("get from disk %+v, searching %s", r, key)
 	}
 
-	// log.Println("lookup", key)
+	logging.Info("lookup", key)
 	for i, d := range r.Children {
-		if d.InDisk {
-			tree.h.getChildrenByNode(d)
-			// log.Printf("get from disk %+v, searching %s", d, key)
-		}
+		// if d.InDisk {	//if we need children, we need to load from disk
+		// 	tree.h.getChildrenByNode(d)
+		// 	logging.Infof("get from disk %+v, searching %s", d, key)
+		// }
 
 		comm := common(key, d.Prefix)
 		if len(comm) == 0 {
@@ -382,7 +390,7 @@ func (r *radNode) lookup(key string, tree *Radix) (*radNode, int, bool) {
 		// The key is found
 		if len(comm) == len(key) {
 			if len(comm) == len(d.Prefix) {
-				// log.Println("found", d.Value)
+				logging.Info("found", d.Value)
 				return d, i, true
 			}
 			return d, i, false
@@ -407,7 +415,7 @@ func cutEdge(n *radNode, tree *Radix) {
 	for i, node := range n.Children {
 		cutEdge(node, tree)
 
-		log.Println("cut seq", n.Children[i].Seq, "internal key", n.Children[i].Value, "father seq", n.Children[i].father.Seq)
+		logging.Info("cut seq", n.Children[i].Seq, "internal key", n.Children[i].Value, "father seq", n.Children[i].father.Seq)
 		n.Children[i].father = nil
 		n.Children[i] = nil
 	}

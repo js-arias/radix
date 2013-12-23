@@ -3,7 +3,7 @@ package radix
 import (
 	"bytes"
 	leveldb "github.com/jmhodges/levigo"
-	"log"
+	"github.com/ngaut/logging"
 	"strconv"
 )
 
@@ -19,10 +19,6 @@ var (
 	ro = leveldb.NewReadOptions()
 )
 
-func init() {
-	log.SetFlags(log.Lshortfile | log.LstdFlags)
-}
-
 func (self *Levelstorage) Open(path string) (err error) {
 	opts := leveldb.NewOptions()
 	opts.SetCache(leveldb.NewLRUCache(3 << 30))
@@ -36,7 +32,7 @@ func (self *Levelstorage) Open(path string) (err error) {
 
 func (self *Levelstorage) BeginWriteBatch() error {
 	if self.currentBatch != nil {
-		log.Fatal("writebatch already exist")
+		logging.Fatal("writebatch already exist")
 	}
 
 	self.currentBatch = leveldb.NewWriteBatch()
@@ -45,7 +41,7 @@ func (self *Levelstorage) BeginWriteBatch() error {
 
 func (self *Levelstorage) CommitWriteBatch() error {
 	if self.currentBatch == nil {
-		log.Fatal("need to call BeginWriteBatch first")
+		logging.Fatal("need to call BeginWriteBatch first")
 	}
 	err := self.db.Write(wo, self.currentBatch)
 	self.currentBatch.Close()
@@ -55,7 +51,7 @@ func (self *Levelstorage) CommitWriteBatch() error {
 
 func (self *Levelstorage) Rollback() error {
 	if self.currentBatch == nil {
-		log.Fatal("need to call BeginWriteBatch first")
+		logging.Fatal("need to call BeginWriteBatch first")
 	}
 	self.currentBatch.Close()
 	self.currentBatch = nil

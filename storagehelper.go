@@ -40,7 +40,7 @@ func (self *helper) persistentNode(n radNode, value []byte) error {
 		return err
 	}
 
-	log.Println("persistentNode", n.Value, string(buf))
+	// log.Println("persistentNode", n.Value, string(buf))
 	if err = self.store.WriteNode(seq, buf); err != nil {
 		log.Fatal(err)
 	}

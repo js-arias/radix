@@ -2,7 +2,7 @@ package radix
 
 import (
 	"container/list"
-	"log"
+	"github.com/ngaut/logging"
 	"os"
 	"sync"
 	"time"
@@ -21,9 +21,14 @@ const (
 	invalid_version = -1
 )
 
+func init() {
+	logging.SetFlags(logging.Lshortfile | logging.LstdFlags)
+	logging.SetLevelByString("debug")
+}
+
 // New returns a new, empty radix tree.
 func New(path string) *Radix {
-	log.Println("open db")
+	logging.Info("open db")
 	rad := &Radix{
 		Root: &radNode{
 			Seq: ROOT_SEQ, InDisk: true},
@@ -35,40 +40,42 @@ func New(path string) *Radix {
 	defer rad.lock.Unlock()
 
 	if err := rad.h.store.Open(rad.path); err != nil {
-		log.Fatal(err)
+		logging.Fatal(err)
 	}
 
-	// log.Println(store.Stats())
+	// logging.Info(store.Stats())
 
 	rad.beginWriteBatch()
 
 	if err := rad.h.getChildrenByNode(rad.Root); err != nil {
-		// log.Println(err)
+		// logging.Info(err)
 		rad.h.persistentNode(*rad.Root, nil)
 		rad.commitWriteBatch()
-		log.Printf("root: %+v", rad.Root)
+		logging.Infof("root: %+v", rad.Root)
 	} else {
 		rad.rollback()
 		rad.Root.InDisk = false
-		log.Printf("root: %+v", rad.Root)
+		logging.Infof("root: %+v", rad.Root)
 		_, err = rad.h.store.GetLastSeq()
 		if err != nil {
-			log.Fatal(err)
+			logging.Fatal(err)
 		}
 	}
+
+	rad.MaxInMemoryNodeCount = 1
 
 	return rad
 }
 
 func (self *Radix) addCallBack() {
 	if self.h.GetInMemoryNodeCount() > self.MaxInMemoryNodeCount {
-		log.Println("need cutEdge", "current count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
-		log.Println("tree mem dump")
-		self.h.DumpMemNode(self.Root, 0)
+		// logging.Info("need cutEdge", "current count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
+		// logging.Info("tree mem dump")
+		// self.h.DumpMemNode(self.Root, 0)
 
 		cutEdge(self.Root, self)
-		log.Printf("%+v", self.Root)
-		log.Println("left count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
+		// logging.Infof("%+v", self.Root)
+		// logging.Info("left count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
 	}
 }
 
@@ -92,7 +99,7 @@ func (self *Radix) Destory() error {
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
-	log.Println("Destory!")
+	logging.Info("Destory!")
 	self.cleanup()
 	os.RemoveAll(self.path)
 	return nil
@@ -102,7 +109,7 @@ func (self *Radix) DumpTree() error {
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
-	log.Println("dump tree:")
+	logging.Info("dump tree:")
 	if self.Root == nil {
 		return nil
 	}
@@ -116,7 +123,7 @@ func (self *Radix) DumpMemTree() {
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
-	log.Println("dump mem tree:")
+	logging.Info("dump mem tree:")
 
 	if self.Root == nil {
 		return
@@ -131,12 +138,12 @@ func (self *Radix) Delete(key string) []byte {
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
-	// log.Println("delete", key)
+	// logging.Info("delete", key)
 	self.beginWriteBatch()
 	b := self.Root.delete(key, self)
 	err := self.commitWriteBatch()
 	if err != nil {
-		log.Fatal(err)
+		logging.Fatal(err)
 		return nil
 	}
 
@@ -153,21 +160,21 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 	start := time.Now()
 	defer func() {
 		if n := time.Since(start).Nanoseconds() / 1000 / 1000; n > 100 {
-			log.Println("too slow insert using", n, "milsec")
+			logging.Info("too slow insert using", n, "milsec")
 		}
 	}()
 
 	self.beginWriteBatch()
 	oldvalue, err := self.Root.put(key, []byte(Value), key, invalid_version, false, self)
 	if err != nil {
-		log.Println(err)
+		logging.Info(err)
 		self.commitWriteBatch()
 		return nil, err
 	}
 
 	err = self.commitWriteBatch()
 	if err != nil {
-		log.Fatal(err)
+		logging.Fatal(err)
 		return nil, err
 	}
 
@@ -183,14 +190,14 @@ func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) 
 	self.beginWriteBatch()
 	oldvalue, err := self.Root.put(key, []byte(Value), key, version, false, self)
 	if err != nil {
-		log.Println(err)
+		logging.Info(err)
 		self.commitWriteBatch()
 		return nil, err
 	}
 
 	err = self.commitWriteBatch()
 	if err != nil {
-		log.Fatal(err)
+		logging.Fatal(err)
 		return nil, err
 	}
 
@@ -266,7 +273,8 @@ func (self *Radix) Prefix(prefix string) *list.List {
 	if n == nil {
 		return l
 	}
-	n.addToList(l)
+	logging.Info("now add to list")
+	n.addToList(l, self)
 	self.addCallBack()
 	return l
 }
