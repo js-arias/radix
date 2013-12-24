@@ -8,12 +8,15 @@ import (
 	"time"
 )
 
-const COUNT = 10000
+const COUNT = 20000
 
 var _ = bytes.HasPrefix
 var _ = fmt.Scan
 var _ = time.Now
 var _ = log.Println
+
+//todo: concurence test
+//random md5 key test
 
 func TestDeleteAll(t *testing.T) {
 	r := New(".")

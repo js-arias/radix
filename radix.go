@@ -174,9 +174,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 				Seq:      tree.h.allocSeq(),
 			}
 			//adjust father
-			for _, x := range n.Children {
-				x.father = n
-			}
+			adjustFather(n)
 			tree.h.AddInMemoryNodeCount(1)
 
 			tree.h.persistentNode(*n, nil)
@@ -204,9 +202,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 			Seq:      tree.h.allocSeq(),
 		}
 		//adjust father
-		for _, x := range p.Children {
-			x.father = p
-		}
+		adjustFather(p)
 		tree.h.AddInMemoryNodeCount(1)
 
 		tree.h.persistentNode(*p, nil)
@@ -269,7 +265,6 @@ func save(l *list.List, str string, marker string, value interface{}, limitCount
 	}
 
 	if str > marker && value != nil {
-		// println("add ", str)
 		l.PushBack(str)
 		if inc {
 			*currentCount += 1
@@ -299,13 +294,11 @@ func (r *radNode) getFirstByDelimiter(marker string, delimiter string, limitCoun
 L:
 	for _, d := range r.Children {
 		//leaf or prefix include delimiter
-		// println("check ", d.Prefix, "marker ", marker)
 		if d.InDisk {
 			tree.h.getChildrenByNode(d)
 		}
 
 		if len(d.Children) == 0 { //leaf node
-			// println("leaf: ", d.Prefix)
 			if pos := strings.Index(d.Prefix, delimiter); pos >= 0 {
 				// println("delimiter ", delimiter, " found")
 				if !save(l, d.Prefix[:pos+1], marker, true, limitCount, currentCount, true) {
@@ -323,7 +316,6 @@ L:
 			continue
 		}
 
-		// println("check delimiter ", d.Prefix, delimiter)
 		if pos := strings.Index(d.Prefix, delimiter); pos >= 0 {
 			logging.Info("delimiter ", delimiter, " found")
 			if !save(l, d.Prefix[:pos+1], marker, true, limitCount, currentCount, true) {
@@ -409,4 +401,10 @@ func cutEdge(n *radNode, tree *Radix) {
 
 	n.Children = nil
 	n.InDisk = indisk
+}
+
+func adjustFather(n *radNode) {
+	for _, child := range n.Children {
+		child.father = n
+	}
 }

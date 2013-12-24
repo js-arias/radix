@@ -63,7 +63,7 @@ func New(path string) *Radix {
 		}
 	}
 
-	rad.MaxInMemoryNodeCount = 0
+	rad.MaxInMemoryNodeCount = 1000
 
 	return rad
 }
