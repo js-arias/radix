@@ -24,7 +24,7 @@ const (
 
 func init() {
 	logging.SetFlags(logging.Lshortfile | logging.LstdFlags)
-	logging.SetLevelByString("debug")
+	logging.SetLevelByString("info")
 }
 
 // New returns a new, empty radix tree or open exist db.
@@ -139,7 +139,7 @@ func (self *Radix) Delete(key string) []byte {
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
-	// logging.Info("delete", key)
+	logging.Info("delete", key)
 	self.beginWriteBatch()
 	b := self.Root.delete(key, self)
 	err := self.commitWriteBatch()
@@ -245,7 +245,7 @@ func (self *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, l
 	self.lock.RLock()
 	defer self.lock.RUnlock()
 
-	logging.Info("limitCount", limitCount)
+	logging.Info("limitCount", limitCount, "prefix", prefix, "marker", marker)
 
 	node, _, _ := self.Root.lookup(prefix, self)
 	if node == nil {
@@ -255,7 +255,19 @@ func (self *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, l
 
 	var currentCount int32
 
-	l := node.getFirstByDelimiter(marker, delimiter, limitCount, limitLevel, &currentCount, self)
+	l := node.listByPrefixDelimiterMarker(marker, delimiter, limitCount, limitLevel, &currentCount, self)
+	for e := l.Front(); e != nil; e = e.Next() {
+		key := e.Value.(*Tuple).Value
+		if e.Value.(*Tuple).Type == RESULT_CONTENT {
+			value, err := self.h.store.GetKey(key)
+			if err != nil {
+				logging.Error("should never happend", e.Value)
+				continue
+			}
+			e.Value = value
+		}
+
+	}
 	self.addNodesCallBack()
 
 	return l

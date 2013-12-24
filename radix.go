@@ -23,6 +23,11 @@ type radNode struct {
 	InDisk   bool
 }
 
+const (
+	RESULT_COMMON_PREFIX = 0
+	RESULT_CONTENT       = 1
+)
+
 func (self *Radix) beginWriteBatch() {
 	self.h.store.BeginWriteBatch()
 }
@@ -35,13 +40,60 @@ func (self *Radix) rollback() error {
 	return self.h.store.Rollback()
 }
 
+func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
+	var prefix string
+	var latest *radNode
+	logging.Debugf("pathCompression %+v, %+v", n, leaf)
+	if n.Seq == ROOT_SEQ {
+		logging.Debugf("persistent %+v", n)
+		self.h.persistentNode(*n, nil)
+		return
+	}
+
+	for n != nil && n.Seq != ROOT_SEQ && len(n.Children) == 1 && len(n.Value) == 0 {
+		latest = n
+		prefix = n.Prefix + prefix
+		err := self.h.delNodeFromStorage(n.Seq)
+		if err != nil {
+			logging.Fatal(err)
+		}
+
+		n = n.father
+	}
+
+	// if latest == nil {
+	// 	logging.Debugf("persistent %+v", n)
+	// 	self.h.persistentNode(*n, nil)
+	// 	return
+	// }
+
+	err := self.h.delNodeFromStorage(leaf.Seq)
+	if err != nil {
+		logging.Fatal(err)
+	}
+
+	father := latest.father
+	seq := latest.Seq
+
+	leaf.Prefix = prefix + leaf.Prefix
+	leaf.Seq = seq
+	leaf.father = father
+
+	latest.Children[0] = nil
+	latest.Children = nil
+	*latest = *leaf
+	logging.Debugf("persistent %+v, %+v", father, leaf)
+	self.h.persistentNode(*latest, nil)
+	self.h.persistentNode(*father, nil)
+}
+
 func (self *Radix) deleteNode(n *radNode) {
 	if n.Seq == ROOT_SEQ { //root
 		self.h.persistentNode(*n, nil)
 		return
 	}
 
-	logging.Infof("%v %v %+v", n.Seq, n.father.Seq, n)
+	logging.Infof("deleteNode %v %v %+v", n.Seq, n.father.Seq, n)
 	//remove from storage
 	if len(n.Value) > 0 {
 		err := self.h.delFromStoragebyKey(n.Value)
@@ -51,7 +103,7 @@ func (self *Radix) deleteNode(n *radNode) {
 		n.Value = ""
 	}
 
-	if len(n.Children) > 0 {
+	if len(n.Children) > 0 { //todo: combine if only 1 child
 		logging.Info(n.Seq, n.father.Seq)
 		err := self.h.persistentNode(*n, nil)
 		if err != nil {
@@ -74,8 +126,8 @@ func (self *Radix) deleteNode(n *radNode) {
 
 	//n is leaf node
 	if len(n.father.Children) > 1 {
+		n.father.Children[i] = nil
 		if i == len(n.father.Children)-1 { //last one
-			n.father.Children[i] = nil
 			n.father.Children = n.father.Children[:i]
 		} else {
 			n.father.Children = append(n.father.Children[:i], n.father.Children[i+1:]...)
@@ -83,16 +135,22 @@ func (self *Radix) deleteNode(n *radNode) {
 
 		self.h.AddInMemoryNodeCount(-1)
 
+		if len(n.father.Children) == 1 { //if there is only node after remove, we can do combine
+			self.pathCompression(n.father, n.father.Children[0])
+			return
+		}
+
 		self.h.persistentNode(*n.father, nil)
-		//todo: if there is only node after remove, we can do combine
 	} else if len(n.father.Children) == 1 {
-		// logging.Info("recursive delete")
+		n.father.Children[0] = nil
 		n.father.Children = nil
 		self.h.AddInMemoryNodeCount(-1)
 
 		if len(n.father.Value) == 0 {
+			logging.Info("recursive delete")
 			self.deleteNode(n.father) //recursive find & delete
 		} else {
+			logging.Debugf("persistent %+v, %d", n.father, len(n.father.Value))
 			self.h.persistentNode(*n.father, nil)
 		}
 	} else {
@@ -241,12 +299,11 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 	return nil, nil
 }
 
-// add the content of a node and its Childrenendants to a list
 func (r *radNode) addToList(l *list.List, tree *Radix) {
 	if r.InDisk {
 		tree.h.getChildrenByNode(r)
 	}
-	logging.Infof("checking %+v", r)
+	// logging.Infof("checking %+v", r)
 	if len(r.Value) > 0 {
 		logging.Info("push", r.Value)
 		l.PushBack(decodeValueToKey(r.Value))
@@ -256,16 +313,28 @@ func (r *radNode) addToList(l *list.List, tree *Radix) {
 	}
 }
 
+type Tuple struct {
+	Key   string
+	Value string
+	Type  int
+}
+
 //return: false if full
-func save(l *list.List, str string, marker string, value interface{}, limitCount int32, currentCount *int32, inc bool) bool {
+func save(l *list.List, str string, marker string, limitCount int32, currentCount *int32, n *radNode, inc bool) bool {
 	if inc {
 		if *currentCount >= limitCount {
+			// logging.Debug("full")
 			return false
 		}
 	}
 
-	if str > marker && value != nil {
-		l.PushBack(str)
+	if str > marker {
+		tp := RESULT_CONTENT
+		if len(n.Value) == 0 {
+			tp = RESULT_COMMON_PREFIX
+		}
+		// logging.Debug("save", str, n.Value)
+		l.PushBack(&Tuple{Key: str, Value: n.Value, Type: tp})
 		if inc {
 			*currentCount += 1
 		}
@@ -274,7 +343,7 @@ func save(l *list.List, str string, marker string, value interface{}, limitCount
 	return true
 }
 
-func (r *radNode) getFirstByDelimiter(marker string, delimiter string, limitCount int32, limitLevel int, currentCount *int32, tree *Radix) *list.List {
+func (r *radNode) listByPrefixDelimiterMarker(marker string, delimiter string, limitCount int32, limitLevel int, currentCount *int32, tree *Radix) *list.List {
 	l := list.New()
 
 	if r.InDisk {
@@ -283,9 +352,10 @@ func (r *radNode) getFirstByDelimiter(marker string, delimiter string, limitCoun
 
 	//search tree first
 	if pos := strings.Index(r.Prefix, delimiter); pos >= 0 {
-		// println("delimiter ", delimiter, " found")
-		save(l, r.Prefix[:pos+1], marker, true, limitCount, currentCount, true)
-		return l
+		logging.Info("delimiter ", delimiter, " found")
+		if !save(l, r.Prefix[:pos+1], marker, limitCount, currentCount, r, true) || len(r.Value) == 0 {
+			return l
+		}
 	}
 
 	n := len(common(marker, r.Prefix))
@@ -299,9 +369,10 @@ L:
 		}
 
 		if len(d.Children) == 0 { //leaf node
+			logging.Info("check", d.Prefix, d.Value)
 			if pos := strings.Index(d.Prefix, delimiter); pos >= 0 {
-				// println("delimiter ", delimiter, " found")
-				if !save(l, d.Prefix[:pos+1], marker, true, limitCount, currentCount, true) {
+				logging.Info("delimiter ", delimiter, " found")
+				if !save(l, d.Prefix[:pos+1], marker, limitCount, currentCount, d, true) {
 					break L
 				}
 
@@ -309,30 +380,42 @@ L:
 				continue
 			}
 
-			if !save(l, d.Prefix, marker, true, limitCount, currentCount, true) {
+			if !save(l, d.Prefix, marker, limitCount, currentCount, d, true) {
 				break L
 			}
 
 			continue
 		}
 
+		logging.Info("check", d.Prefix, d.Value)
+
 		if pos := strings.Index(d.Prefix, delimiter); pos >= 0 {
 			logging.Info("delimiter ", delimiter, " found")
-			if !save(l, d.Prefix[:pos+1], marker, true, limitCount, currentCount, true) {
+			if !save(l, d.Prefix[:pos+1], marker, limitCount, currentCount, d, true) {
 				break L
 			}
 
 			//no need to search sub tree
-			continue
-		} else {
-			if !save(l, d.Prefix, marker, d.Value, limitCount, currentCount, true) {
-				break L
+			if len(d.Value) == 0 {
+				continue
 			}
 
 			n := len(common(marker, r.Prefix))
-			ll := d.getFirstByDelimiter(marker[n:], delimiter, limitCount, limitLevel+1, currentCount, tree)
+			ll := d.listByPrefixDelimiterMarker(marker[n:], delimiter, limitCount, limitLevel+1, currentCount, tree)
 			for e := ll.Front(); e != nil; e = e.Next() { //no need to check full, already checked by child function
-				save(l, e.Value.(string), marker, true, limitCount, currentCount, false)
+				save(l, e.Value.(*Tuple).Key, marker, limitCount, currentCount, d, false)
+			}
+
+		} else {
+			if !save(l, d.Prefix, marker, limitCount, currentCount, d, true) {
+				break L
+			}
+			// logging.Debugf("%+v, marker:%s", d, marker)
+
+			n := len(common(marker, r.Prefix))
+			ll := d.listByPrefixDelimiterMarker(marker[n:], delimiter, limitCount, limitLevel+1, currentCount, tree)
+			for e := ll.Front(); e != nil; e = e.Next() { //no need to check full, already checked by child function
+				save(l, e.Value.(*Tuple).Key, marker, limitCount, currentCount, d, false)
 			}
 		}
 	}
@@ -340,7 +423,8 @@ L:
 	moreCompleteList := list.New()
 	for e := l.Front(); e != nil; e = e.Next() {
 		// println("level:", limitLevel, "moreCompleteList", r.Prefix+e.Value.(string))
-		moreCompleteList.PushBack(r.Prefix + e.Value.(string))
+		e.Value.(*Tuple).Key = r.Prefix + e.Value.(*Tuple).Key
+		moreCompleteList.PushBack(e.Value.(*Tuple))
 	}
 
 	return moreCompleteList
