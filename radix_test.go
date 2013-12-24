@@ -19,7 +19,7 @@ var _ = log.Println
 //random md5 key test
 
 func TestDeleteAll(t *testing.T) {
-	r := New(".")
+	r := Open(".")
 	defer r.Destory()
 
 	r.Insert("test", "test")
@@ -43,7 +43,7 @@ func TestDeleteAll(t *testing.T) {
 }
 
 func TestInsertion(t *testing.T) {
-	r := New(".")
+	r := Open(".")
 	defer r.Destory()
 
 	r.Insert("test", "test")
@@ -78,7 +78,7 @@ func TestInsertion(t *testing.T) {
 }
 
 func TestCas(t *testing.T) {
-	r := New(".")
+	r := Open(".")
 	defer r.Destory()
 
 	r.Insert("key", "value")
@@ -133,7 +133,7 @@ func TestCas(t *testing.T) {
 }
 
 func TestRecursiveDelete(t *testing.T) {
-	r := New(".")
+	r := Open(".")
 	defer r.Destory()
 
 	r.Insert("t", "test")
@@ -158,7 +158,7 @@ func TestRecursiveDelete(t *testing.T) {
 }
 
 func TestRecursiveDeleteMany(t *testing.T) {
-	r := New(".")
+	r := Open(".")
 	defer r.Destory()
 
 	count := 1000
@@ -181,7 +181,7 @@ func TestRecursiveDeleteMany(t *testing.T) {
 }
 
 func TestRecursiveDelete1(t *testing.T) {
-	r := New(".")
+	r := Open(".")
 	defer r.Destory()
 
 	r.Insert("t", "test")
@@ -228,7 +228,7 @@ func TestRecursiveDelete1(t *testing.T) {
 }
 
 func TestDeleteDisk(t *testing.T) {
-	r := New(".")
+	r := Open(".")
 
 	r.Insert("test", "test")
 	r.Insert("slow", "slow")
@@ -253,7 +253,7 @@ func TestDeleteDisk(t *testing.T) {
 
 	r.Close()
 
-	r = New(".")
+	r = Open(".")
 
 	if s := r.Lookup("tester"); s != nil {
 		t.Error("expecting nil")
@@ -270,7 +270,7 @@ func TestDeleteDisk(t *testing.T) {
 
 	r.Close()
 
-	r = New(".")
+	r = Open(".")
 
 	if s := r.Lookup("slower"); s == nil {
 		t.Error("expecting non nil")
@@ -283,14 +283,14 @@ func TestDeleteDisk(t *testing.T) {
 	}
 
 	r.Close()
-	r = New(".")
+	r = Open(".")
 
 	log.Println("after delete water")
 
 	r.DumpTree()
 	r.Close()
 
-	r = New(".")
+	r = Open(".")
 	defer r.Destory()
 
 	if s := r.Lookup("water"); s != nil {
@@ -315,7 +315,7 @@ func TestDeleteDisk(t *testing.T) {
 }
 
 func TestLookupByPrefixAndDelimiter(t *testing.T) {
-	r := New(".")
+	r := Open(".")
 	defer r.Destory()
 
 	r.Insert("test", "")
@@ -343,7 +343,7 @@ func TestLookupByPrefixAndDelimiter(t *testing.T) {
 }
 
 func TestLookupByPrefixAndDelimiter_complex(t *testing.T) {
-	r := New(".")
+	r := Open(".")
 	defer r.Destory()
 
 	r.Insert("te#st", "")
@@ -368,7 +368,7 @@ func TestLookupByPrefixAndDelimiter_complex(t *testing.T) {
 }
 
 func TestLookupByPrefixAndDelimiter_limit(t *testing.T) {
-	r := New(".")
+	r := Open(".")
 	defer r.Destory()
 
 	r.Insert("test", "")
@@ -409,7 +409,7 @@ func TestLookupByPrefixAndDelimiter_limit(t *testing.T) {
 }
 
 func TestLookupByPrefixAndDelimiter_limit_marker(t *testing.T) {
-	r := New(".")
+	r := Open(".")
 	defer r.Destory()
 
 	r.Insert("test", "")
@@ -442,7 +442,7 @@ func TestLookupByPrefixAndDelimiter_limit_marker(t *testing.T) {
 }
 
 func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
-	r := New(".")
+	r := Open(".")
 
 	start := time.Now()
 	for i := 0; i < COUNT; i++ {
@@ -455,7 +455,7 @@ func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 	log.Println("Insert", COUNT, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
 	r.Close()
 
-	r = New(".")
+	r = Open(".")
 
 	start = time.Now()
 	l := r.LookupByPrefixAndDelimiter("2", "/", 100, 10, "")
@@ -466,7 +466,7 @@ func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 
 	r.Close()
 
-	r = New(".")
+	r = Open(".")
 	defer r.Destory()
 
 	start = time.Now()
@@ -482,7 +482,7 @@ func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 }
 
 func TestLookupByPrefixAndDelimiter_complex_many_bigkey(t *testing.T) {
-	r := New(".")
+	r := Open(".")
 
 	start := time.Now()
 	b := bytes.Buffer{}
@@ -503,7 +503,7 @@ func TestLookupByPrefixAndDelimiter_complex_many_bigkey(t *testing.T) {
 
 	log.Println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$big key Insert", COUNT, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
 
-	r = New(".")
+	r = Open(".")
 
 	start = time.Now()
 	l := r.LookupByPrefixAndDelimiter("2", "/", 100, 10, "")
@@ -514,7 +514,7 @@ func TestLookupByPrefixAndDelimiter_complex_many_bigkey(t *testing.T) {
 
 	r.Close()
 
-	r = New(".")
+	r = Open(".")
 	defer r.Destory()
 
 	start = time.Now()
@@ -530,7 +530,7 @@ func TestLookupByPrefixAndDelimiter_complex_many_bigkey(t *testing.T) {
 }
 
 func TestLookup(t *testing.T) {
-	r := New(".")
+	r := Open(".")
 	defer r.Destory()
 
 	r.Insert("test", "test")
@@ -585,7 +585,7 @@ func TestLookup(t *testing.T) {
 }
 
 func TestLookupOnDisk(t *testing.T) {
-	r := New(".")
+	r := Open(".")
 
 	r.Insert("test", "test")
 	r.Insert("slow", "slow")
@@ -598,7 +598,7 @@ func TestLookupOnDisk(t *testing.T) {
 
 	r.Close()
 
-	r = New(".")
+	r = Open(".")
 	defer r.Destory()
 
 	if s := r.Lookup("tester"); s != nil {
@@ -645,7 +645,7 @@ func TestLookupOnDisk(t *testing.T) {
 }
 
 func TestDelete(t *testing.T) {
-	r := New(".")
+	r := Open(".")
 	defer r.Destory()
 
 	r.Insert("test", "test")
@@ -693,7 +693,7 @@ func TestDelete(t *testing.T) {
 }
 
 func TestPrefix(t *testing.T) {
-	r := New(".")
+	r := Open(".")
 	defer r.Destory()
 
 	r.Insert("test", "test")

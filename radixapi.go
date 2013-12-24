@@ -27,8 +27,8 @@ func init() {
 	logging.SetLevelByString("debug")
 }
 
-// New returns a new, empty radix tree.
-func New(path string) *Radix {
+// New returns a new, empty radix tree or open exist db.
+func Open(path string) *Radix {
 	logging.Info("open db")
 	rad := &Radix{
 		Root: &radNode{
@@ -68,7 +68,7 @@ func New(path string) *Radix {
 	return rad
 }
 
-func (self *Radix) addCallBack() {
+func (self *Radix) addNodesCallBack() {
 	if self.h.GetInMemoryNodeCount() > self.MaxInMemoryNodeCount {
 		// logging.Info("need cutEdge", "current count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
 		// logging.Info("tree mem dump")
@@ -151,8 +151,7 @@ func (self *Radix) Delete(key string) []byte {
 	return b
 }
 
-// Insert put a Value in the radix. It returns an error if the given key
-// is already in use.
+// Insert put a Value in the radix. It returns old value if exist
 func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 	self.lock.Lock()
 	defer self.lock.Unlock()
@@ -178,7 +177,7 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 		return nil, err
 	}
 
-	self.addCallBack()
+	self.addNodesCallBack()
 
 	return oldvalue, nil
 }
@@ -201,7 +200,7 @@ func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) 
 		return nil, err
 	}
 
-	self.addCallBack()
+	self.addNodesCallBack()
 
 	return oldvalue, nil
 }
@@ -219,7 +218,7 @@ func (self *Radix) Lookup(key string) []byte {
 		return buf
 	}
 
-	self.addCallBack()
+	self.addNodesCallBack()
 
 	return nil
 }
@@ -237,7 +236,7 @@ func (self *Radix) GetWithVersion(key string) ([]byte, int64) {
 		return buf, x.Version
 	}
 
-	self.addCallBack()
+	self.addNodesCallBack()
 
 	return nil, 0
 }
@@ -257,7 +256,7 @@ func (self *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, l
 	var currentCount int32
 
 	l := node.getFirstByDelimiter(marker, delimiter, limitCount, limitLevel, &currentCount, self)
-	self.addCallBack()
+	self.addNodesCallBack()
 
 	return l
 }
@@ -272,9 +271,9 @@ func (self *Radix) Prefix(prefix string) *list.List {
 	if n == nil {
 		return l
 	}
-	logging.Info("now add to list")
+	// logging.Info("now add to list")
 	n.addToList(l, self)
-	self.addCallBack()
+	self.addNodesCallBack()
 	return l
 }
 
