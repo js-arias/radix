@@ -73,15 +73,14 @@ func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 	}
 
 	father := latest.father
-	seq := latest.Seq
 
-	leaf.Prefix = prefix + leaf.Prefix
-	leaf.Seq = seq
-	leaf.father = father
+	latest.Prefix = prefix + leaf.Prefix
+	latest.Value = leaf.Value
+	latest.Version = leaf.Version
 
 	latest.Children[0] = nil
 	latest.Children = nil
-	*latest = *leaf
+
 	logging.Debugf("persistent %+v, %+v", father, leaf)
 	self.h.persistentNode(*latest, nil)
 	self.h.persistentNode(*father, nil)
