@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"sync"
 	"testing"
 	"time"
 )
 
-const COUNT = 200
+const COUNT = 2000
 
 var _ = bytes.HasPrefix
 var _ = fmt.Scan
@@ -31,7 +32,7 @@ func TestDeleteAll(t *testing.T) {
 	r.Delete("te")
 	r.Delete("tester")
 	r.Delete("test")
-	r.DumpMemTree()
+
 	r.Delete("slow")
 
 	r.Delete("water")
@@ -60,11 +61,9 @@ func TestInsertion(t *testing.T) {
 	r.Insert("team", "team")
 
 	log.Println(r.Stats())
-	r.DumpMemTree()
-	log.Println(r.Stats())
-	r.DumpTree()
+	// r.DumpTree()
 	r.Insert("tester", "tester")
-	r.DumpMemTree()
+
 	r.Insert("te", "te")
 
 	if _, err := r.Insert("slow", "slow"); err == nil {
@@ -167,15 +166,14 @@ func TestDeleteCombine(t *testing.T) {
 	r.Insert("12", "12")
 	r.Delete("1")
 	r.Delete("11")
-	r.DumpMemTree()
+
 	r.Insert("2", "2")
 	r.Insert("21", "21")
 	r.Insert("22", "22")
-	r.DumpMemTree()
+
 	r.Delete("2")
 	r.Delete("21")
 
-	r.DumpMemTree()
 	r.Delete("12")
 	r.Delete("22")
 
@@ -196,24 +194,22 @@ func TestDeleteLastNodeCombine(t *testing.T) {
 	r.Insert("12", "12")
 	r.Delete("1")
 	r.Delete("12")
-	r.DumpMemTree()
+
 	r.Insert("2", "2")
 	r.Insert("21", "21")
 	r.Insert("22", "22")
 	r.Insert("211", "211")
-	r.DumpMemTree()
+
 	r.Delete("2")
 	r.Delete("22")
 
-	r.DumpMemTree()
 	r.Delete("11")
-	r.DumpMemTree()
+
 	r.Delete("21")
-	r.DumpMemTree()
+
 	r.Delete("111")
-	r.DumpMemTree()
+
 	r.Delete("211")
-	r.DumpMemTree()
 
 	for _, d := range r.Root.Children {
 		t.Errorf("should be empty tree %+v", d)
@@ -231,18 +227,19 @@ func TestRecursiveDeleteMany(t *testing.T) {
 	for i := 0; i < count; i++ {
 		str := fmt.Sprintf("%d", i)
 		r.Insert(str, str)
+		r.DumpMemTree()
 	}
-
-	// r.DumpMemTree()
 
 	for i := 0; i < count; i++ {
 		str := fmt.Sprintf("%d", i)
 		old := r.Delete(str)
+
 		if string(old) != str {
 			t.Errorf("delete value not match old %s expect %s", string(old), str)
 		}
+		r.DumpMemTree()
 		// log.Println(r.Stats())
-		// r.DumpMemTree()
+
 	}
 
 	for _, d := range r.Root.Children {
@@ -255,6 +252,7 @@ func TestRecursiveDeleteMany(t *testing.T) {
 		if old != nil {
 			t.Error("expect nil")
 		}
+		r.DumpMemTree()
 	}
 
 	// log.Println(r.Stats())
@@ -367,7 +365,7 @@ func TestDeleteDisk(t *testing.T) {
 
 	log.Println("after delete water")
 
-	r.DumpTree()
+	// r.DumpTree()
 	r.Close()
 
 	r = Open(".")
@@ -412,7 +410,7 @@ func TestLookupByPrefixAndDelimiter(t *testing.T) {
 	r.Insert("test123/2", "")
 	r.Insert("test123//2", "")
 
-	r.DumpTree()
+	// r.DumpTree()
 
 	l := r.LookupByPrefixAndDelimiter("t", "/", 100, 100, "")
 	if l.Len() != 6 {
@@ -461,7 +459,6 @@ func TestLookupByPrefixAndDelimiterWith1Child(t *testing.T) {
 	r.Delete("t")
 
 	log.Println("TestLookupByPrefixAndDelimiterWith1Child...")
-	r.DumpMemTree()
 
 	l := r.LookupByPrefixAndDelimiter("t", "/", 100, 100, "")
 	if l.Len() != 1 {
@@ -560,7 +557,7 @@ func TestLookupByPrefixAndDelimiter_delimiterNotExist(t *testing.T) {
 	r.Insert("test123/2", "test123/2")
 	r.Insert("test123//2", "test123//2")
 
-	r.DumpTree()
+	// r.DumpTree()
 
 	l := r.LookupByPrefixAndDelimiter("", "*", 100, 100, "")
 	if l.Len() != 11 {
@@ -651,7 +648,6 @@ func TestLookupByPrefixAndDelimiter_limit_marker(t *testing.T) {
 	r.Insert("test123/1", "")
 	r.Insert("test123/2", "")
 	r.Insert("test123//2", "")
-	r.DumpMemTree()
 
 	l := r.LookupByPrefixAndDelimiter("t", "/", 5, 100, "test")
 	if l.Len() != 2 {
@@ -666,17 +662,17 @@ func TestLookupByPrefixAndDelimiter_limit_marker1(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	r.Insert("test", "")
-	r.Insert("slow", "")
-	r.Insert("water", "")
-	r.Insert("slower", "")
-	r.Insert("tester", "")
-	r.Insert("team", "")
-	r.Insert("toast", "")
+	r.Insert("test", "1")
+	r.Insert("slow", "2")
+	r.Insert("water", "3")
+	r.Insert("slower", "4")
+	r.Insert("tester", "5")
+	r.Insert("team", "6")
+	r.Insert("toast", "7")
 	r.Insert("te", "te")
-	r.Insert("test123/1", "")
-	r.Insert("test123/2", "")
-	r.Insert("test123//2", "")
+	r.Insert("test123/1", "8")
+	r.Insert("test123/2", "9")
+	r.Insert("test123//2", "10")
 
 	l := r.LookupByPrefixAndDelimiter("t", "/", 5, 100, "te")
 	if l.Len() != 4 {
@@ -684,6 +680,10 @@ func TestLookupByPrefixAndDelimiter_limit_marker1(t *testing.T) {
 		for v := l.Front(); v != nil; v = v.Next() {
 			log.Printf("%+v", v.Value)
 		}
+	}
+
+	for v := l.Front(); v != nil; v = v.Next() {
+		log.Printf("%+v", v.Value.(*Tuple))
 	}
 }
 
@@ -951,7 +951,6 @@ func TestPrefix(t *testing.T) {
 	r.Insert("toast", "toast")
 	r.Insert("timor", "timor")
 
-	r.DumpMemTree()
 	// r.DumpTree()
 
 	l := r.Prefix("t")
@@ -1000,4 +999,63 @@ func TestDumpEmptyTree(t *testing.T) {
 	if r.DumpTree() != nil {
 		t.Error("should be nil")
 	}
+}
+
+func TestConcurrent(t *testing.T) {
+	r := Open(".")
+	defer r.Destory()
+
+	count := 20000
+
+	for i := 0; i < count; i++ {
+		str := fmt.Sprintf("%d", i)
+		r.Insert(str, str)
+	}
+
+	goroutineCount := 4
+
+	wg := sync.WaitGroup{}
+	wg.Add(goroutineCount)
+	f := func() {
+		for i := 0; i < count; i++ {
+			str := fmt.Sprintf("%d", i)
+			buf, version := r.GetWithVersion(str)
+			if version != 0 || string(buf) != str {
+				t.FailNow()
+			}
+		}
+		log.Println("done")
+		wg.Done()
+	}
+
+	for i := 0; i < goroutineCount; i++ {
+		go f()
+	}
+
+	wg.Wait()
+
+	for i := 0; i < count; i++ {
+		str := fmt.Sprintf("%d", i)
+		old := r.Delete(str)
+
+		if string(old) != str {
+			t.Errorf("delete value not match old %s expect %s", string(old), str)
+		}
+	}
+
+	// r.DumpMemTree()
+
+	for _, d := range r.Root.Children {
+		t.Errorf("should be empty tree %+v", d)
+	}
+
+	for i := 0; i < count; i++ {
+		str := fmt.Sprintf("%d", i)
+		old := r.Delete(str)
+		if old != nil {
+			t.Error("expect nil")
+		}
+	}
+
+	// log.Println(r.Stats())
 }

@@ -25,7 +25,7 @@ const (
 
 func init() {
 	logging.SetFlags(logging.Lshortfile | logging.LstdFlags)
-	logging.SetLevelByString("info")
+	logging.SetLevelByString("debug")
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
@@ -35,7 +35,7 @@ func Open(path string) *Radix {
 	logging.Info("open db")
 	rad := &Radix{
 		Root: &radNode{
-			Seq: ROOT_SEQ, InDisk: true},
+			Seq: ROOT_SEQ, OnDisk: true},
 		path: filepath.Join(path, "/db"),
 		h:    &helper{store: &Levelstorage{}, startSeq: ROOT_SEQ},
 	}
@@ -58,7 +58,7 @@ func Open(path string) *Radix {
 		logging.Infof("root: %+v", rad.Root)
 	} else {
 		rad.rollback()
-		rad.Root.InDisk = false
+		rad.Root.OnDisk = false
 		logging.Infof("root: %+v", rad.Root)
 		_, err = rad.h.store.GetLastSeq()
 		if err != nil {
@@ -66,7 +66,7 @@ func Open(path string) *Radix {
 		}
 	}
 
-	rad.MaxInMemoryNodeCount = 100
+	rad.MaxInMemoryNodeCount = 1000
 
 	return rad
 }
@@ -141,7 +141,10 @@ func (self *Radix) DumpMemTree() error {
 //todo: using transaction
 func (self *Radix) Delete(key string) []byte {
 	self.lock.Lock()
-	defer self.lock.Unlock()
+	defer func() {
+		self.addNodesCallBack()
+		self.lock.Unlock()
+	}()
 
 	logging.Info("delete", key)
 	self.beginWriteBatch()
@@ -158,8 +161,10 @@ func (self *Radix) Delete(key string) []byte {
 // Insert put a Value in the radix. It returns old value if exist
 func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 	self.lock.Lock()
-	defer self.lock.Unlock()
-	defer self.addNodesCallBack()
+	defer func() {
+		self.addNodesCallBack()
+		self.lock.Unlock()
+	}()
 
 	start := time.Now()
 	defer func() {
@@ -187,8 +192,10 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 
 func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) {
 	self.lock.Lock()
-	defer self.lock.Unlock()
-	defer self.addNodesCallBack()
+	defer func() {
+		self.addNodesCallBack()
+		self.lock.Unlock()
+	}()
 
 	self.beginWriteBatch()
 	oldvalue, err := self.Root.put(key, []byte(Value), key, version, false, self)
@@ -211,7 +218,6 @@ func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) 
 func (self *Radix) Lookup(key string) []byte {
 	self.lock.RLock()
 	defer self.lock.RUnlock()
-	defer self.addNodesCallBack()
 
 	if x, _, ok := self.Root.lookup(key, self); ok {
 		buf, err := self.h.GetValueFromStore(x.Value)
@@ -227,7 +233,6 @@ func (self *Radix) Lookup(key string) []byte {
 func (self *Radix) GetFirstLevelChildrenCount(key string) int {
 	self.lock.RLock()
 	defer self.lock.RUnlock()
-	defer self.addNodesCallBack()
 
 	if x, _, _ := self.Root.lookup(key, self); x != nil {
 		return len(x.Children)
@@ -240,7 +245,6 @@ func (self *Radix) GetFirstLevelChildrenCount(key string) int {
 func (self *Radix) FindInternalKey(key string) string {
 	self.lock.RLock()
 	defer self.lock.RUnlock()
-	defer self.addNodesCallBack()
 
 	if x, _, _ := self.Root.lookup(key, self); x != nil {
 		return x.Value
@@ -253,7 +257,6 @@ func (self *Radix) FindInternalKey(key string) string {
 func (self *Radix) GetWithVersion(key string) ([]byte, int64) {
 	self.lock.RLock()
 	defer self.lock.RUnlock()
-	defer self.addNodesCallBack()
 
 	if x, _, ok := self.Root.lookup(key, self); ok {
 		buf, err := self.h.GetValueFromStore(x.Value)
@@ -269,7 +272,6 @@ func (self *Radix) GetWithVersion(key string) ([]byte, int64) {
 func (self *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, limitCount int32, limitLevel int, marker string) *list.List {
 	self.lock.RLock()
 	defer self.lock.RUnlock()
-	defer self.addNodesCallBack()
 
 	logging.Info("limitCount", limitCount, "prefix", prefix, "marker", marker)
 
@@ -294,16 +296,17 @@ func (self *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, l
 	l := list.New()
 	node.listByPrefixDelimiterMarker(skipRoot, delimiter, limitCount, limitLevel, &currentCount, self, l)
 	for e := l.Front(); e != nil; e = e.Next() {
-		key := e.Value.(*Tuple).Value
-		if e.Value.(*Tuple).Type == RESULT_CONTENT {
+		tuple := e.Value.(*Tuple)
+		key := tuple.Value
+		if tuple.Type == RESULT_CONTENT {
 			value, err := self.h.store.GetKey(key)
 			if err != nil {
 				logging.Error("should never happend", e.Value)
 				continue
 			}
-			e.Value = value
+			tuple.Value = string(value)
+			e.Value = tuple
 		}
-
 	}
 
 	return l
@@ -321,7 +324,6 @@ func (self *Radix) Prefix(prefix string) *list.List {
 	}
 	// logging.Info("now add to list")
 	n.addToList(l, self)
-	self.addNodesCallBack()
 	return l
 }
 

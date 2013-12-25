@@ -32,7 +32,7 @@ func (self *helper) persistentNode(n radNode, value []byte) error {
 	children := n.cloneChildren()
 
 	seq := strconv.FormatInt(n.Seq, 10)
-	n.InDisk = true
+	n.OnDisk = true
 	n.Children = children
 	buf, err := json.Marshal(n)
 	if err != nil {
@@ -95,7 +95,7 @@ func (self *helper) getChildrenByNode(n *radNode) error {
 	self.loadmu.Lock() //todo: using seq and hashring to make lock less heivy
 	defer self.loadmu.Unlock()
 
-	if !n.InDisk { //check if multithread loading the same node
+	if !n.OnDisk { //check if multithread loading the same node
 		return nil
 	}
 	//debug msg
@@ -135,7 +135,7 @@ func (self *helper) getChildrenByNode(n *radNode) error {
 		log.Fatal("can't be real")
 	}
 
-	n.InDisk = false
+	n.OnDisk = false
 
 	return err
 }
@@ -146,7 +146,7 @@ func (r *radNode) cloneChildren() []*radNode {
 		e := &radNode{}
 		*e = *d //copy it
 		e.Children = nil
-		e.InDisk = true
+		e.OnDisk = true
 		nodes = append(nodes, e)
 	}
 
@@ -160,7 +160,7 @@ func (self *helper) DumpNode(node *radNode, level int) error {
 
 	loadFromDisk := false
 
-	if node.InDisk {
+	if node.OnDisk {
 		self.getChildrenByNode(node)
 		// log.Printf("load: %+v", node)
 		loadFromDisk = true
@@ -190,7 +190,7 @@ func (self *helper) DumpMemNode(node *radNode, level int) error {
 		return nil
 	}
 
-	if node.InDisk {
+	if node.OnDisk {
 		return nil
 	}
 
