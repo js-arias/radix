@@ -3,6 +3,7 @@ package radix
 import (
 	"container/list"
 	"github.com/ngaut/logging"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -25,6 +26,8 @@ const (
 func init() {
 	logging.SetFlags(logging.Lshortfile | logging.LstdFlags)
 	logging.SetLevelByString("info")
+
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
 // New returns a new, empty radix tree or open exist db.
@@ -63,7 +66,7 @@ func Open(path string) *Radix {
 		}
 	}
 
-	rad.MaxInMemoryNodeCount = 1000
+	rad.MaxInMemoryNodeCount = 100
 
 	return rad
 }
@@ -100,7 +103,7 @@ func (self *Radix) Destory() error {
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
-	logging.Info("Destory!")
+	logging.Warning("Destory!")
 	self.cleanup()
 	os.RemoveAll(self.path)
 	return nil
@@ -120,17 +123,18 @@ func (self *Radix) DumpTree() error {
 	return nil
 }
 
-func (self *Radix) DumpMemTree() {
+func (self *Radix) DumpMemTree() error {
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
 	logging.Info("dump mem tree:")
 
 	if self.Root == nil {
-		return
+		return nil
 	}
 
 	self.h.DumpMemNode(self.Root, 0)
+	return nil
 }
 
 // Delete removes the Value associated with a particular key and returns it.
@@ -155,6 +159,7 @@ func (self *Radix) Delete(key string) []byte {
 func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 	self.lock.Lock()
 	defer self.lock.Unlock()
+	defer self.addNodesCallBack()
 
 	start := time.Now()
 	defer func() {
@@ -177,14 +182,13 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 		return nil, err
 	}
 
-	self.addNodesCallBack()
-
 	return oldvalue, nil
 }
 
 func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) {
 	self.lock.Lock()
 	defer self.lock.Unlock()
+	defer self.addNodesCallBack()
 
 	self.beginWriteBatch()
 	oldvalue, err := self.Root.put(key, []byte(Value), key, version, false, self)
@@ -200,8 +204,6 @@ func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) 
 		return nil, err
 	}
 
-	self.addNodesCallBack()
-
 	return oldvalue, nil
 }
 
@@ -209,6 +211,7 @@ func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) 
 func (self *Radix) Lookup(key string) []byte {
 	self.lock.RLock()
 	defer self.lock.RUnlock()
+	defer self.addNodesCallBack()
 
 	if x, _, ok := self.Root.lookup(key, self); ok {
 		buf, err := self.h.GetValueFromStore(x.Value)
@@ -218,15 +221,39 @@ func (self *Radix) Lookup(key string) []byte {
 		return buf
 	}
 
-	self.addNodesCallBack()
-
 	return nil
+}
+
+func (self *Radix) GetFirstLevelChildrenCount(key string) int {
+	self.lock.RLock()
+	defer self.lock.RUnlock()
+	defer self.addNodesCallBack()
+
+	if x, _, _ := self.Root.lookup(key, self); x != nil {
+		return len(x.Children)
+	}
+
+	//means not found
+	return -1
+}
+
+func (self *Radix) FindInternalKey(key string) string {
+	self.lock.RLock()
+	defer self.lock.RUnlock()
+	defer self.addNodesCallBack()
+
+	if x, _, _ := self.Root.lookup(key, self); x != nil {
+		return x.Value
+	}
+
+	return ""
 }
 
 // Lookup searches for a particular string in the tree.
 func (self *Radix) GetWithVersion(key string) ([]byte, int64) {
 	self.lock.RLock()
 	defer self.lock.RUnlock()
+	defer self.addNodesCallBack()
 
 	if x, _, ok := self.Root.lookup(key, self); ok {
 		buf, err := self.h.GetValueFromStore(x.Value)
@@ -236,26 +263,36 @@ func (self *Radix) GetWithVersion(key string) ([]byte, int64) {
 		return buf, x.Version
 	}
 
-	self.addNodesCallBack()
-
 	return nil, 0
 }
 
 func (self *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, limitCount int32, limitLevel int, marker string) *list.List {
 	self.lock.RLock()
 	defer self.lock.RUnlock()
+	defer self.addNodesCallBack()
 
 	logging.Info("limitCount", limitCount, "prefix", prefix, "marker", marker)
 
-	node, _, _ := self.Root.lookup(prefix, self)
+	key := prefix
+	if len(marker) > 0 {
+		key = marker
+	}
+
+	node, _, exist := self.Root.lookup(key, self)
 	if node == nil {
 		return list.New()
 	}
-	// println(node.Prefix, "---", node.Value)
+	logging.Info(node.Prefix, "---", node.Value)
+
+	var skipRoot bool
+	if exist && len(marker) > 0 {
+		skipRoot = true
+	}
 
 	var currentCount int32
 
-	l := node.listByPrefixDelimiterMarker(marker, delimiter, limitCount, limitLevel, &currentCount, self)
+	l := list.New()
+	node.listByPrefixDelimiterMarker(skipRoot, delimiter, limitCount, limitLevel, &currentCount, self, l)
 	for e := l.Front(); e != nil; e = e.Next() {
 		key := e.Value.(*Tuple).Value
 		if e.Value.(*Tuple).Type == RESULT_CONTENT {
@@ -268,7 +305,6 @@ func (self *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, l
 		}
 
 	}
-	self.addNodesCallBack()
 
 	return l
 }

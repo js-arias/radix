@@ -43,9 +43,9 @@ func (self *Radix) rollback() error {
 func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 	var prefix string
 	var latest *radNode
-	logging.Debugf("pathCompression %+v, %+v", n, leaf)
+	logging.Infof("pathCompression %+v, %+v", n, leaf)
 	if n.Seq == ROOT_SEQ {
-		logging.Debugf("persistent %+v", n)
+		logging.Infof("persistent %+v", n)
 		self.h.persistentNode(*n, nil)
 		return
 	}
@@ -61,29 +61,31 @@ func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 		n = n.father
 	}
 
-	// if latest == nil {
-	// 	logging.Debugf("persistent %+v", n)
-	// 	self.h.persistentNode(*n, nil)
-	// 	return
-	// }
+	if latest == nil {
+		logging.Infof("persistent %+v", n)
+		self.h.persistentNode(*n, nil)
+		return
+	}
 
 	err := self.h.delNodeFromStorage(leaf.Seq)
 	if err != nil {
 		logging.Fatal(err)
 	}
 
-	father := latest.father
-
-	latest.Prefix = prefix + leaf.Prefix
-	latest.Value = leaf.Value
-	latest.Version = leaf.Version
+	leaf.Prefix = prefix + leaf.Prefix
+	leaf.Seq = latest.Seq
+	leaf.father = latest.father
 
 	latest.Children[0] = nil
 	latest.Children = nil
+	*latest = *leaf
+	for _, c := range latest.Children {
+		c.father = latest
+	}
 
-	logging.Debugf("persistent %+v, %+v", father, leaf)
+	logging.Infof("persistent %+v, %+v", latest.father, leaf)
 	self.h.persistentNode(*latest, nil)
-	self.h.persistentNode(*father, nil)
+	self.h.persistentNode(*latest.father, nil)
 }
 
 func (self *Radix) deleteNode(n *radNode) {
@@ -102,13 +104,15 @@ func (self *Radix) deleteNode(n *radNode) {
 		n.Value = ""
 	}
 
-	if len(n.Children) > 0 { //todo: combine if only 1 child
-		logging.Info(n.Seq, n.father.Seq)
+	logging.Info(n.Seq, n.father.Seq)
+	if len(n.Children) > 1 {
 		err := self.h.persistentNode(*n, nil)
 		if err != nil {
 			logging.Fatal(err)
 		}
-
+		return
+	} else if len(n.Children) == 1 {
+		self.pathCompression(n, n.Children[0])
 		return
 	}
 
@@ -149,7 +153,7 @@ func (self *Radix) deleteNode(n *radNode) {
 			logging.Info("recursive delete")
 			self.deleteNode(n.father) //recursive find & delete
 		} else {
-			logging.Debugf("persistent %+v, %d", n.father, len(n.father.Value))
+			logging.Infof("persistent %+v, %d", n.father, len(n.father.Value))
 			self.h.persistentNode(*n.father, nil)
 		}
 	} else {
@@ -318,8 +322,19 @@ type Tuple struct {
 	Type  int
 }
 
+func getWholePrefix(n *radNode) string {
+	var prefix string
+	x := n
+	for n != nil && n.father != nil {
+		prefix = n.father.Prefix + prefix
+		n = n.father
+	}
+
+	return prefix + x.Prefix
+}
+
 //return: false if full
-func save(l *list.List, str string, marker string, limitCount int32, currentCount *int32, n *radNode, inc bool) bool {
+func save(l *list.List, limitCount int32, currentCount *int32, n *radNode, inc bool) bool {
 	if inc {
 		if *currentCount >= limitCount {
 			// logging.Debug("full")
@@ -327,13 +342,13 @@ func save(l *list.List, str string, marker string, limitCount int32, currentCoun
 		}
 	}
 
-	if str > marker {
+	if n.Seq != ROOT_SEQ {
 		tp := RESULT_CONTENT
 		if len(n.Value) == 0 {
 			tp = RESULT_COMMON_PREFIX
 		}
-		// logging.Debug("save", str, n.Value)
-		l.PushBack(&Tuple{Key: str, Value: n.Value, Type: tp})
+		logging.Info("save", getWholePrefix(n), n.Value)
+		l.PushBack(&Tuple{Key: getWholePrefix(n), Value: n.Value, Type: tp})
 		if inc {
 			*currentCount += 1
 		}
@@ -342,91 +357,53 @@ func save(l *list.List, str string, marker string, limitCount int32, currentCoun
 	return true
 }
 
-func (r *radNode) listByPrefixDelimiterMarker(marker string, delimiter string, limitCount int32, limitLevel int, currentCount *int32, tree *Radix) *list.List {
-	l := list.New()
+func (r *radNode) match(delimiter string, limitCount int32, limitLevel int, currentCount *int32, tree *Radix, l *list.List) (goon bool) {
+	logging.Info("checking", r.Prefix, "delimiter", delimiter, "value", r.Value)
+	if pos := strings.Index(r.Prefix, delimiter); len(delimiter) > 0 && pos >= 0 {
+		logging.Info("delimiter", delimiter, "found")
+		save(l, limitCount, currentCount, r, true)
+		return false
+	}
 
+	if len(r.Value) > 0 { //leaf node
+		ok := save(l, limitCount, currentCount, r, true)
+		if len(r.Children) == 0 || !ok {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (r *radNode) listByPrefixDelimiterMarker(skipRoot bool, delimiter string, limitCount int32, limitLevel int, currentCount *int32, tree *Radix, l *list.List) {
+	logging.Info("level", limitLevel)
 	if r.InDisk {
 		tree.h.getChildrenByNode(r)
 	}
 
 	//search tree first
-	if pos := strings.Index(r.Prefix, delimiter); pos >= 0 {
-		logging.Info("delimiter ", delimiter, " found")
-		if !save(l, r.Prefix[:pos+1], marker, limitCount, currentCount, r, true) || len(r.Value) == 0 {
-			return l
+	if !skipRoot {
+		goon := r.match(delimiter, limitCount, limitLevel, currentCount, tree, l)
+		if !goon {
+			return
 		}
 	}
 
-	n := len(common(marker, r.Prefix))
-	marker = marker[n:]
-
-L:
 	for _, d := range r.Children {
 		//leaf or prefix include delimiter
 		if d.InDisk {
 			tree.h.getChildrenByNode(d)
 		}
 
-		if len(d.Children) == 0 { //leaf node
-			logging.Info("check", d.Prefix, d.Value)
-			if pos := strings.Index(d.Prefix, delimiter); pos >= 0 {
-				logging.Info("delimiter ", delimiter, " found")
-				if !save(l, d.Prefix[:pos+1], marker, limitCount, currentCount, d, true) {
-					break L
-				}
-
-				//no need to search sub tree
-				continue
-			}
-
-			if !save(l, d.Prefix, marker, limitCount, currentCount, d, true) {
-				break L
-			}
-
+		goon := d.match(delimiter, limitCount, limitLevel, currentCount, tree, l)
+		if !goon {
 			continue
 		}
 
-		logging.Info("check", d.Prefix, d.Value)
-
-		if pos := strings.Index(d.Prefix, delimiter); pos >= 0 {
-			logging.Info("delimiter ", delimiter, " found")
-			if !save(l, d.Prefix[:pos+1], marker, limitCount, currentCount, d, true) {
-				break L
-			}
-
-			//no need to search sub tree
-			if len(d.Value) == 0 {
-				continue
-			}
-
-			n := len(common(marker, r.Prefix))
-			ll := d.listByPrefixDelimiterMarker(marker[n:], delimiter, limitCount, limitLevel+1, currentCount, tree)
-			for e := ll.Front(); e != nil; e = e.Next() { //no need to check full, already checked by child function
-				save(l, e.Value.(*Tuple).Key, marker, limitCount, currentCount, d, false)
-			}
-
-		} else {
-			if !save(l, d.Prefix, marker, limitCount, currentCount, d, true) {
-				break L
-			}
-			// logging.Debugf("%+v, marker:%s", d, marker)
-
-			n := len(common(marker, r.Prefix))
-			ll := d.listByPrefixDelimiterMarker(marker[n:], delimiter, limitCount, limitLevel+1, currentCount, tree)
-			for e := ll.Front(); e != nil; e = e.Next() { //no need to check full, already checked by child function
-				save(l, e.Value.(*Tuple).Key, marker, limitCount, currentCount, d, false)
-			}
+		for _, c := range d.Children {
+			c.listByPrefixDelimiterMarker(false, delimiter, limitCount, limitLevel+1, currentCount, tree, l)
 		}
 	}
-
-	moreCompleteList := list.New()
-	for e := l.Front(); e != nil; e = e.Next() {
-		// println("level:", limitLevel, "moreCompleteList", r.Prefix+e.Value.(string))
-		e.Value.(*Tuple).Key = r.Prefix + e.Value.(*Tuple).Key
-		moreCompleteList.PushBack(e.Value.(*Tuple))
-	}
-
-	return moreCompleteList
 }
 
 // implementats lookup: node, index, exist
@@ -436,8 +413,13 @@ func (r *radNode) lookup(key string, tree *Radix) (*radNode, int, bool) {
 		// logging.Infof("get from disk %+v, searching %s", r, key)
 	}
 
-	logging.Info("lookup", key)
+	if len(key) == 0 {
+		return tree.Root, -1, false
+	}
+
+	logging.Infof("lookup %s, %+v", key, r)
 	for i, d := range r.Children {
+		logging.Infof("lookup %s, %+v", key, d)
 		if d.InDisk { //if we need children, we need to load from disk
 			tree.h.getChildrenByNode(d)
 			logging.Infof("get from disk %+v, searching %s", d, key)
@@ -449,8 +431,8 @@ func (r *radNode) lookup(key string, tree *Radix) (*radNode, int, bool) {
 		}
 		// The key is found
 		if len(comm) == len(key) {
+			logging.Info("found", d.Value)
 			if len(comm) == len(d.Prefix) {
-				// logging.Info("found", d.Value)
 				return d, i, true
 			}
 			return d, i, false
