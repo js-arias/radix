@@ -24,10 +24,8 @@ func TestDeleteAll(t *testing.T) {
 	r.Insert("water", "water")
 	r.Insert("te", "test")
 	r.Insert("tester", "test")
-	r.DumpTree()
 
 	r.Delete("te")
-	r.DumpTree()
 	r.Delete("tester")
 	r.Delete("test")
 
@@ -183,8 +181,6 @@ func TestDeleteCombine(t *testing.T) {
 	if !r.h.store.IsEmpty() {
 		t.Error("should be empty", r.Stats())
 	}
-
-	log.Println("TestDeleteCombine", r.Stats())
 }
 
 func TestDeleteLastNodeCombine(t *testing.T) {
@@ -941,8 +937,6 @@ func TestPrefix(t *testing.T) {
 	r.Insert("toast", "toast")
 	r.Insert("timor", "timor")
 
-	// r.DumpTree()
-
 	l := r.Prefix("t")
 	if l.Len() != 5 {
 		t.Errorf("l.Len() = %d expecting 5", l.Len())
@@ -1092,18 +1086,18 @@ func TestOnDiskDelete(t *testing.T) {
 }
 
 func TestConcurrentReadWrite(t *testing.T) {
-	runtime.GOMAXPROCS(2)
+	runtime.GOMAXPROCS(4)
 	r := Open(".")
 	defer r.Destory()
 
-	count := 2000
+	count := 20000
 
 	for i := 0; i < count; i++ {
 		str := fmt.Sprintf("%d", i)
 		r.Insert(str, str)
 	}
 
-	goroutineCount := 4
+	goroutineCount := 20
 
 	wg := sync.WaitGroup{}
 	wg.Add(2 * goroutineCount)

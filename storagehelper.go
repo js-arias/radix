@@ -141,7 +141,7 @@ func (self *helper) getChildrenByNode(n *radNode) error {
 		logging.Fatal("can't be real")
 	}
 
-	logging.Infof("load from disk %+v", *n)
+	// logging.Infof("load from disk %+v", *n)
 
 	n.OnDisk = false
 
