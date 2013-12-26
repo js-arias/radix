@@ -4,17 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
 )
 
-const COUNT = 200
-
-var _ = bytes.HasPrefix
-var _ = fmt.Scan
-var _ = time.Now
-var _ = log.Println
+const COUNT = 20000
 
 //todo: concurence test
 //random md5 key test
@@ -1087,6 +1083,91 @@ func TestOnDiskDelete(t *testing.T) {
 	}
 
 	for i := 0; i < count; i++ {
+		str := fmt.Sprintf("%d", i)
+		old := r.Delete(str)
+		if old != nil {
+			t.Error("expect nil")
+		}
+	}
+}
+
+func TestConcurrentReadWrite(t *testing.T) {
+	runtime.GOMAXPROCS(2)
+	r := Open(".")
+	defer r.Destory()
+
+	count := 2000
+
+	for i := 0; i < count; i++ {
+		str := fmt.Sprintf("%d", i)
+		r.Insert(str, str)
+	}
+
+	goroutineCount := 4
+
+	wg := sync.WaitGroup{}
+	wg.Add(2 * goroutineCount)
+	f := func(start, end int) {
+		for i := start; i < end; i++ {
+			str := fmt.Sprintf("%d", i)
+			buf, version := r.GetWithVersion(str)
+			if version != 0 || string(buf) != str {
+				t.FailNow()
+			}
+		}
+		log.Println("read done")
+		wg.Done()
+	}
+
+	for i := 0; i < goroutineCount; i++ {
+		go f(i*count/goroutineCount, (i+1)*count/goroutineCount)
+	}
+
+	w := func(start, end int) {
+		for i := start; i < end; i++ {
+			str := fmt.Sprintf("%d", i)
+			r.Insert(str, str)
+		}
+		wg.Done()
+		log.Println("insert done")
+	}
+
+	for i := 0; i < goroutineCount; i++ {
+		go w(i*count/goroutineCount, (i+1)*count/goroutineCount)
+	}
+
+	wg.Wait()
+
+	wg.Add(goroutineCount)
+
+	d := func(start, end int) {
+		for i := start; i < end; i++ {
+			str := fmt.Sprintf("%d", i)
+			old := r.Delete(str)
+
+			if string(old) != str {
+				t.Errorf("delete value not match old %s expect %s", string(old), str)
+			}
+		}
+		log.Println("delete done")
+		wg.Done()
+	}
+
+	for i := 0; i < goroutineCount; i++ {
+		go d(i*count/goroutineCount, (i+1)*count/goroutineCount)
+	}
+
+	wg.Wait()
+
+	for _, d := range r.Root.Children {
+		t.Errorf("should be empty tree %+v", d)
+	}
+
+	if !r.h.store.IsEmpty() {
+		t.Error("should be empty", r.Stats())
+	}
+
+	for i := 0; i < 2*count; i++ {
 		str := fmt.Sprintf("%d", i)
 		old := r.Delete(str)
 		if old != nil {
