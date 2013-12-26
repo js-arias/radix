@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"log"
+	"math/rand"
 	"runtime"
 	"sync"
 	"testing"
@@ -1124,6 +1125,84 @@ func TestConcurrentReadWrite(t *testing.T) {
 		}
 		wg.Done()
 		log.Println("insert done")
+	}
+
+	for i := 0; i < goroutineCount; i++ {
+		go w(i*count/goroutineCount, (i+1)*count/goroutineCount)
+	}
+
+	wg.Wait()
+
+	wg.Add(goroutineCount)
+
+	d := func(start, end int) {
+		for i := start; i < end; i++ {
+			str := fmt.Sprintf("%d", i)
+			old := r.Delete(str)
+
+			if string(old) != str {
+				t.Errorf("delete value not match old %s expect %s", string(old), str)
+			}
+		}
+		log.Println("delete done")
+		wg.Done()
+	}
+
+	for i := 0; i < goroutineCount; i++ {
+		go d(i*count/goroutineCount, (i+1)*count/goroutineCount)
+	}
+
+	wg.Wait()
+
+	for _, d := range r.Root.Children {
+		t.Errorf("should be empty tree %+v", d)
+	}
+
+	if !r.h.store.IsEmpty() {
+		t.Error("should be empty", r.Stats())
+	}
+
+	for i := 0; i < 2*count; i++ {
+		str := fmt.Sprintf("%d", i)
+		old := r.Delete(str)
+		if old != nil {
+			t.Error("expect nil")
+		}
+	}
+}
+
+func TestConcurrentRandomReadWrite(t *testing.T) {
+	runtime.GOMAXPROCS(4)
+	r := Open(".")
+	defer r.Destory()
+
+	count := 20000
+
+	goroutineCount := 20
+
+	wg := sync.WaitGroup{}
+	wg.Add(2 + goroutineCount)
+	f := func() {
+		for i := 0; i < 100000; i++ {
+			k := rand.Int31n(int32(count))
+			str := fmt.Sprintf("%d", k)
+			r.GetWithVersion(str)
+		}
+		log.Println("read done")
+		wg.Done()
+	}
+
+	for i := 0; i < 2; i++ {
+		go f()
+	}
+
+	w := func(start, end int) {
+		for i := start; i < end; i++ {
+			str := fmt.Sprintf("%d", i)
+			r.Insert(str, str)
+		}
+		wg.Done()
+		log.Println("insert done", start, end)
 	}
 
 	for i := 0; i < goroutineCount; i++ {
