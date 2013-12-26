@@ -15,4 +15,5 @@ type Storage interface {
 	SaveLastSeq(int64) error
 	GetLastSeq() (int64, error)
 	Stats() string
+	IsEmpty() bool
 }

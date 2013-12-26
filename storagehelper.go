@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"github.com/ngaut/logging"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -21,10 +21,10 @@ func (self *helper) allocSeq() int64 {
 	self.startSeq += 1
 	err := self.store.SaveLastSeq(self.startSeq)
 	if err != nil {
-		log.Fatal(err)
+		logging.Fatal(err)
 	}
 
-	// log.Println("alloc seq", seq)
+	// logging.Println("alloc seq", seq)
 	return self.startSeq
 }
 
@@ -36,19 +36,19 @@ func (self *helper) persistentNode(n radNode, value []byte) error {
 	n.Children = children
 	buf, err := json.Marshal(n)
 	if err != nil {
-		log.Fatal(err)
+		logging.Fatal(err)
 		return err
 	}
 
-	// log.Println("persistentNode", n.Value, string(buf))
+	// logging.Println("persistentNode", n.Value, string(buf))
 	if err = self.store.WriteNode(seq, buf); err != nil {
-		log.Fatal(err)
+		logging.Fatal(err)
 	}
 
 	if len(n.Value) > 0 && value != nil { //key exist
-		// log.Println("putkey", n.Value, string(value))
+		// logging.Println("putkey", n.Value, string(value))
 		if err = self.store.PutKey(n.Value, value); err != nil {
-			log.Fatal(err)
+			logging.Fatal(err)
 			return err
 		}
 	}
@@ -59,7 +59,7 @@ func (self *helper) persistentNode(n radNode, value []byte) error {
 func (self *helper) delNodeFromStorage(seq int64) error {
 	seqStr := strconv.FormatInt(seq, 10)
 	if err := self.store.DelNode(seqStr); err != nil {
-		log.Fatal(err)
+		logging.Fatal(err)
 		return err
 	}
 
@@ -69,7 +69,7 @@ func (self *helper) delNodeFromStorage(seq int64) error {
 func (self *helper) delFromStoragebyKey(key string) error {
 	err := self.store.DeleteKey(key)
 	if err != nil {
-		log.Fatal(err)
+		logging.Fatal(err)
 	}
 
 	return err
@@ -100,9 +100,9 @@ func (self *helper) getChildrenByNode(n *radNode) error {
 	}
 	//debug msg
 	// if n.father != nil {
-	// 	log.Println("getChildrenByNode", n.Seq, n.father.Seq)
+	// 	logging.Println("getChildrenByNode", n.Seq, n.father.Seq)
 	// } else {
-	// 	log.Println("getChildrenByNode", n.Seq)
+	// 	logging.Println("getChildrenByNode", n.Seq)
 	// }
 
 	father := n.father
@@ -110,7 +110,7 @@ func (self *helper) getChildrenByNode(n *radNode) error {
 	seqstr := strconv.FormatInt(n.Seq, 10)
 	buf, err := self.store.ReadNode(seqstr)
 	if err != nil {
-		log.Println(err, n.Seq)
+		logging.Fatal(err, n.Seq)
 		return err
 	}
 
@@ -118,22 +118,30 @@ func (self *helper) getChildrenByNode(n *radNode) error {
 		return errors.New("get key failed")
 	}
 
-	err = json.Unmarshal(buf, n)
+	var tmp radNode
+	err = json.Unmarshal(buf, &tmp)
 	if err != nil {
-		log.Fatal(err)
+		logging.Fatal(err)
 	}
+
+	*n = tmp
 
 	self.AddInMemoryNodeCount(len(n.Children))
 
 	n.father = father
-	for _, x := range n.Children {
-		x.father = n
+	for _, c := range n.Children {
+		c.father = n
+		if !c.OnDisk {
+			panic("")
+		}
 	}
 
 	//check
 	if n.Seq != seq {
-		log.Fatal("can't be real")
+		logging.Fatal("can't be real")
 	}
+
+	logging.Infof("load from disk %+v", *n)
 
 	n.OnDisk = false
 
@@ -158,13 +166,7 @@ func (self *helper) DumpNode(node *radNode, level int) error {
 		return nil
 	}
 
-	loadFromDisk := false
-
-	if node.OnDisk {
-		self.getChildrenByNode(node)
-		// log.Printf("load: %+v", node)
-		loadFromDisk = true
-	}
+	self.getChildrenByNode(node)
 
 	emptyPrefix := ""
 	for i := 0; i < level; i++ {
@@ -174,11 +176,11 @@ func (self *helper) DumpNode(node *radNode, level int) error {
 	for _, n := range node.Children {
 		//check
 		if n.father.Seq != node.Seq {
-			// log.Println(node.Seq, n.father.Seq, n.Seq)
+			// logging.Println(node.Seq, n.father.Seq, n.Seq)
 			panic("relation not match")
 		}
 
-		fmt.Printf("%s %s, value: %s, seq:%v, father:%v, loadFromDisk:%v\n", emptyPrefix, n.Prefix, n.Value, n.Seq, n.father.Seq, loadFromDisk)
+		fmt.Printf("%s %s, value: %s, seq:%v, father:%v\n", emptyPrefix, n.Prefix, n.Value, n.Seq, n.father.Seq)
 		self.DumpNode(n, level+1)
 	}
 
@@ -202,7 +204,7 @@ func (self *helper) DumpMemNode(node *radNode, level int) error {
 	for _, n := range node.Children {
 		//check
 		if n.father.Seq != node.Seq {
-			// log.Println(node.Seq, n.father.Seq, n.Seq)
+			// logging.Println(node.Seq, n.father.Seq, n.Seq)
 			panic("relation not match")
 		}
 

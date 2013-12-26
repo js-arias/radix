@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const COUNT = 2000
+const COUNT = 200
 
 var _ = bytes.HasPrefix
 var _ = fmt.Scan
@@ -28,8 +28,10 @@ func TestDeleteAll(t *testing.T) {
 	r.Insert("water", "water")
 	r.Insert("te", "test")
 	r.Insert("tester", "test")
+	r.DumpTree()
 
 	r.Delete("te")
+	r.DumpTree()
 	r.Delete("tester")
 	r.Delete("test")
 
@@ -41,7 +43,9 @@ func TestDeleteAll(t *testing.T) {
 		t.Fatal("should be empty tree %+v", d)
 	}
 
-	log.Println(r.Stats())
+	if !r.h.store.IsEmpty() {
+		t.Error("should be empty", r.Stats())
+	}
 }
 
 func TestInsertion(t *testing.T) {
@@ -57,11 +61,8 @@ func TestInsertion(t *testing.T) {
 		}
 	}
 	r.Insert("slower", "slower")
-	log.Println(r.Stats())
 	r.Insert("team", "team")
 
-	log.Println(r.Stats())
-	// r.DumpTree()
 	r.Insert("tester", "tester")
 
 	r.Insert("te", "te")
@@ -154,7 +155,9 @@ func TestRecursiveDelete(t *testing.T) {
 		t.Errorf("should be empty tree %+v", d)
 	}
 
-	log.Println(r.Stats())
+	if !r.h.store.IsEmpty() {
+		t.Error("should be empty", r.Stats())
+	}
 }
 
 func TestDeleteCombine(t *testing.T) {
@@ -179,6 +182,10 @@ func TestDeleteCombine(t *testing.T) {
 
 	for _, d := range r.Root.Children {
 		t.Errorf("should be empty tree %+v", d)
+	}
+
+	if !r.h.store.IsEmpty() {
+		t.Error("should be empty", r.Stats())
 	}
 
 	log.Println("TestDeleteCombine", r.Stats())
@@ -215,7 +222,9 @@ func TestDeleteLastNodeCombine(t *testing.T) {
 		t.Errorf("should be empty tree %+v", d)
 	}
 
-	log.Println("TestDeleteLastNodeCombine", r.Stats())
+	if !r.h.store.IsEmpty() {
+		t.Error("should be empty", r.Stats())
+	}
 }
 
 func TestRecursiveDeleteMany(t *testing.T) {
@@ -227,7 +236,6 @@ func TestRecursiveDeleteMany(t *testing.T) {
 	for i := 0; i < count; i++ {
 		str := fmt.Sprintf("%d", i)
 		r.Insert(str, str)
-		r.DumpMemTree()
 	}
 
 	for i := 0; i < count; i++ {
@@ -236,10 +244,9 @@ func TestRecursiveDeleteMany(t *testing.T) {
 
 		if string(old) != str {
 			t.Errorf("delete value not match old %s expect %s", string(old), str)
+			log.Println(r.Stats())
+			t.Fatal()
 		}
-		r.DumpMemTree()
-		// log.Println(r.Stats())
-
 	}
 
 	for _, d := range r.Root.Children {
@@ -252,10 +259,7 @@ func TestRecursiveDeleteMany(t *testing.T) {
 		if old != nil {
 			t.Error("expect nil")
 		}
-		r.DumpMemTree()
 	}
-
-	// log.Println(r.Stats())
 }
 
 func TestRecursiveDelete1(t *testing.T) {
@@ -278,6 +282,10 @@ func TestRecursiveDelete1(t *testing.T) {
 
 	for _, d := range r.Root.Children {
 		t.Errorf("should be empty tree %+v", d)
+	}
+
+	if !r.h.store.IsEmpty() {
+		t.Error("should be empty", r.Stats())
 	}
 
 	if s := r.Lookup("t"); s != nil {
@@ -327,8 +335,6 @@ func TestDeleteDisk(t *testing.T) {
 		}
 	}
 
-	log.Println("after delete tester")
-
 	r.Close()
 
 	r = Open(".")
@@ -342,9 +348,6 @@ func TestDeleteDisk(t *testing.T) {
 			t.Errorf("expecting %s found %s", "slow", s)
 		}
 	}
-
-	log.Println("after delete slow")
-	log.Println(r.Stats())
 
 	r.Close()
 
@@ -360,12 +363,6 @@ func TestDeleteDisk(t *testing.T) {
 		}
 	}
 
-	r.Close()
-	r = Open(".")
-
-	log.Println("after delete water")
-
-	// r.DumpTree()
 	r.Close()
 
 	r = Open(".")
@@ -402,15 +399,12 @@ func TestLookupByPrefixAndDelimiter(t *testing.T) {
 	r.Insert("slower", "")
 	r.Insert("tester", "")
 	r.Insert("team", "")
-	log.Println("...")
 
 	r.Insert("toast", "")
 	r.Insert("te", "te")
 	r.Insert("test123/1", "")
 	r.Insert("test123/2", "")
 	r.Insert("test123//2", "")
-
-	// r.DumpTree()
 
 	l := r.LookupByPrefixAndDelimiter("t", "/", 100, 100, "")
 	if l.Len() != 6 {
@@ -458,8 +452,6 @@ func TestLookupByPrefixAndDelimiterWith1Child(t *testing.T) {
 	r.Delete("te")
 	r.Delete("t")
 
-	log.Println("TestLookupByPrefixAndDelimiterWith1Child...")
-
 	l := r.LookupByPrefixAndDelimiter("t", "/", 100, 100, "")
 	if l.Len() != 1 {
 		t.Errorf("should got 1, but we got %d", l.Len())
@@ -480,6 +472,10 @@ func TestLookupByPrefixAndDelimiterWith1Child(t *testing.T) {
 	}
 
 	r.Delete("tester")
+
+	if !r.h.store.IsEmpty() {
+		t.Error("should be empty", r.Stats())
+	}
 }
 
 func TestLookupByPrefixAndDelimiter_complex(t *testing.T) {
@@ -556,8 +552,6 @@ func TestLookupByPrefixAndDelimiter_delimiterNotExist(t *testing.T) {
 	r.Insert("test123/1//a", "test123/1//a")
 	r.Insert("test123/2", "test123/2")
 	r.Insert("test123//2", "test123//2")
-
-	// r.DumpTree()
 
 	l := r.LookupByPrefixAndDelimiter("", "*", 100, 100, "")
 	if l.Len() != 11 {
@@ -1005,7 +999,7 @@ func TestConcurrent(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	count := 20000
+	count := 2000
 
 	for i := 0; i < count; i++ {
 		str := fmt.Sprintf("%d", i)
@@ -1043,10 +1037,14 @@ func TestConcurrent(t *testing.T) {
 		}
 	}
 
-	// r.DumpMemTree()
+	log.Printf("%+v", r.Root)
 
 	for _, d := range r.Root.Children {
 		t.Errorf("should be empty tree %+v", d)
+	}
+
+	if !r.h.store.IsEmpty() {
+		t.Error("should be empty", r.Stats())
 	}
 
 	for i := 0; i < count; i++ {
@@ -1056,6 +1054,43 @@ func TestConcurrent(t *testing.T) {
 			t.Error("expect nil")
 		}
 	}
+}
 
-	// log.Println(r.Stats())
+func TestOnDiskDelete(t *testing.T) {
+	r := Open(".")
+	defer r.Destory()
+
+	r.SetMaxInMemoryNodeCount(10)
+
+	count := 2000
+
+	for i := 0; i < count; i++ {
+		str := fmt.Sprintf("%d", i)
+		r.Insert(str, str)
+	}
+
+	for i := 0; i < count; i++ {
+		str := fmt.Sprintf("%d", i)
+		old := r.Delete(str)
+
+		if string(old) != str {
+			t.Errorf("delete value not match old %s expect %s", string(old), str)
+		}
+	}
+
+	for _, d := range r.Root.Children {
+		t.Errorf("should be empty tree %+v", d)
+	}
+
+	if !r.h.store.IsEmpty() {
+		t.Error("should be empty", r.Stats())
+	}
+
+	for i := 0; i < count; i++ {
+		str := fmt.Sprintf("%d", i)
+		old := r.Delete(str)
+		if old != nil {
+			t.Error("expect nil")
+		}
+	}
 }

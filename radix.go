@@ -17,10 +17,10 @@ type radNode struct {
 	Prefix   string     `json:"p,omitempty"` // current prefix of the node
 	Children []*radNode `json:"c,omitempty"`
 	Value    string     `json:"val,omitempty"` // stored key
-	Version  int64      `json:ver, omitempty`
+	Version  int64      `json:"ver, omitempty"`
 	father   *radNode
-	Seq      int64 `json:seq, omitempty`
-	OnDisk   bool  `json:disk, omitempty`
+	Seq      int64 `json:"seq, omitempty"`
+	OnDisk   bool  `json:"ondisk, omitempty"`
 }
 
 const (
@@ -69,6 +69,8 @@ func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 		return
 	}
 
+	self.h.getChildrenByNode(leaf) //we need to copy child if leaf is no disk
+
 	err := self.h.delNodeFromStorage(leaf.Seq)
 	if err != nil {
 		logging.Fatal(err)
@@ -78,14 +80,12 @@ func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 	leaf.Seq = latest.Seq
 	leaf.father = latest.father
 
-	latest.Children[0] = nil
-	latest.Children = nil
 	*latest = *leaf
 	for _, c := range latest.Children {
 		c.father = latest
 	}
 
-	logging.Infof("persistent %+v, %+v", latest.father, leaf)
+	logging.Infof("persistent %+v, %+v", latest.father, latest)
 	self.h.persistentNode(*latest, nil)
 	self.h.persistentNode(*latest.father, nil)
 }
@@ -96,7 +96,7 @@ func (self *Radix) deleteNode(n *radNode) {
 		return
 	}
 
-	logging.Infof("deleteNode %v %v %+v", n.Seq, n.father.Seq, n)
+	logging.Infof("deleteNode %+v, %+v", n, n.father)
 	//remove from storage
 	if len(n.Value) > 0 {
 		err := self.h.delFromStoragebyKey(n.Value)
@@ -108,6 +108,7 @@ func (self *Radix) deleteNode(n *radNode) {
 
 	logging.Info(n.Seq, n.father.Seq)
 	if len(n.Children) > 1 {
+		logging.Infof("persistent %+v", n)
 		err := self.h.persistentNode(*n, nil)
 		if err != nil {
 			logging.Fatal(err)
@@ -185,19 +186,11 @@ func (r *radNode) delete(key string, tree *Radix) []byte {
 // implements insert or replace, return nil, nil if this a new value
 func (r *radNode) put(key string, Value []byte, orgKey string, version int64, force bool, tree *Radix) ([]byte, error) {
 	logging.Info("insert", orgKey, "--", string(Value))
-	if r.OnDisk {
-		logging.Infof("Load %+v", r)
-		tree.h.getChildrenByNode(r)
-	}
+
+	tree.h.getChildrenByNode(r)
 
 	for _, d := range r.Children {
-		if d.OnDisk {
-			checkprefix := d.Prefix
-			tree.h.getChildrenByNode(d)
-			if d.Prefix != checkprefix {
-				logging.Fatal("d.Prefix", d.Prefix, checkprefix)
-			}
-		}
+		tree.h.getChildrenByNode(d)
 
 		comm := common(key, d.Prefix)
 		if len(comm) == 0 {
@@ -305,9 +298,8 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 }
 
 func (r *radNode) addToList(l *list.List, tree *Radix) {
-	if r.OnDisk {
-		tree.h.getChildrenByNode(r)
-	}
+	tree.h.getChildrenByNode(r)
+
 	// logging.Infof("checking %+v", r)
 	if len(r.Value) > 0 {
 		logging.Info("push", r.Value)
@@ -379,9 +371,8 @@ func (r *radNode) match(delimiter string, limitCount int32, limitLevel int, curr
 
 func (r *radNode) listByPrefixDelimiterMarker(skipRoot bool, delimiter string, limitCount int32, limitLevel int, currentCount *int32, tree *Radix, l *list.List) {
 	logging.Info("level", limitLevel)
-	if r.OnDisk {
-		tree.h.getChildrenByNode(r)
-	}
+
+	tree.h.getChildrenByNode(r)
 
 	//search root first
 	if !skipRoot {
@@ -393,9 +384,7 @@ func (r *radNode) listByPrefixDelimiterMarker(skipRoot bool, delimiter string, l
 
 	for _, d := range r.Children {
 		//leaf or prefix include delimiter
-		if d.OnDisk {
-			tree.h.getChildrenByNode(d)
-		}
+		tree.h.getChildrenByNode(d)
 
 		goon := d.match(delimiter, limitCount, limitLevel, currentCount, tree, l)
 		if !goon {
@@ -410,35 +399,36 @@ func (r *radNode) listByPrefixDelimiterMarker(skipRoot bool, delimiter string, l
 
 // implementats lookup: node, index, exist
 func (r *radNode) lookup(key string, tree *Radix) (*radNode, int, bool) {
-	if r.OnDisk {
-		tree.h.getChildrenByNode(r)
-		// logging.Infof("get from disk %+v, searching %s", r, key)
-	}
+
+	tree.h.getChildrenByNode(r)
 
 	if len(key) == 0 {
 		return tree.Root, -1, false
 	}
 
 	logging.Infof("lookup %s, %+v", key, r)
+
 	for i, d := range r.Children {
+		tree.h.getChildrenByNode(d)
+
 		logging.Infof("lookup %s, %+v", key, d)
-		if d.OnDisk { //if we need children, we need to load from disk
-			tree.h.getChildrenByNode(d)
-			logging.Infof("get from disk %+v, searching %s", d, key)
-		}
 
 		comm := common(key, d.Prefix)
 		if len(comm) == 0 {
 			continue
 		}
+
 		// The key is found
 		if len(comm) == len(key) {
-			logging.Info("found", d.Value)
+			logging.Infof("found %+v", d)
 			if len(comm) == len(d.Prefix) {
 				return d, i, true
 			}
 			return d, i, false
 		}
+
+		tree.h.getChildrenByNode(d)
+
 		return d.lookup(key[len(comm):], tree)
 	}
 	return nil, 0, false
@@ -450,24 +440,23 @@ func cutEdge(n *radNode, tree *Radix) {
 		return
 	}
 
-	OnDisk := false
-
-	if len(n.Children) > 0 {
-		OnDisk = true
+	if n.OnDisk {
+		logging.Infof("%+v ondisk", n)
+		return
 	}
 
 	for i, node := range n.Children {
 		cutEdge(node, tree)
 
-		logging.Info("cut seq", n.Children[i].Seq, "internal key", n.Children[i].Value, "father seq", n.Children[i].father.Seq)
+		logging.Info("cut seq", n.Children[i].Seq, "internal key", n.Children[i].Value, "father seq", n.Children[i].father.Seq, "len(father.children)", len(n.Children))
 		n.Children[i].father = nil
 		n.Children[i] = nil
 	}
 
-	tree.h.AddInMemoryNodeCount(-len(n.Children))
-
 	n.Children = nil
-	n.OnDisk = OnDisk
+	n.OnDisk = true
+
+	tree.h.AddInMemoryNodeCount(-(len(n.Children) + 1))
 }
 
 func adjustFather(n *radNode) {

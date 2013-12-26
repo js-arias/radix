@@ -66,7 +66,7 @@ func Open(path string) *Radix {
 		}
 	}
 
-	rad.MaxInMemoryNodeCount = 1000
+	rad.MaxInMemoryNodeCount = 0
 
 	return rad
 }
@@ -78,7 +78,7 @@ func (self *Radix) addNodesCallBack() {
 		// self.h.DumpMemNode(self.Root, 0)
 
 		cutEdge(self.Root, self)
-		// logging.Infof("%+v", self.Root)
+		// logging.Debugf("after cut%+v", self.Root)
 		// logging.Info("left count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
 	}
 }

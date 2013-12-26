@@ -122,3 +122,22 @@ func (self *Levelstorage) Stats() string {
 
 	return b.String()
 }
+
+// ##LAST_SEQ_KEY  ----> 19
+// -1  ----> {"Version":0,"Seq":-1,"OnDisk":true}
+func (self *Levelstorage) IsEmpty() bool {
+	it := self.db.NewIterator(ro)
+	defer it.Close()
+
+	cnt := 0
+
+	it.SeekToFirst()
+	for ; it.Valid(); it.Next() {
+		cnt++
+		if cnt > 2 {
+			return false
+		}
+	}
+
+	return true
+}
