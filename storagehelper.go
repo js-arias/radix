@@ -1,10 +1,10 @@
 package radix
 
 import (
-	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/ngaut/logging"
+	enc "labix.org/v2/mgo/bson"
+	"reflect"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -18,14 +18,14 @@ type helper struct {
 }
 
 func (self *helper) allocSeq() int64 {
-	self.startSeq += 1
-	err := self.store.SaveLastSeq(self.startSeq)
+	seq := atomic.AddInt64(&self.startSeq, 1)
+	err := self.store.SaveLastSeq(seq)
 	if err != nil {
 		logging.Fatal(err)
 	}
 
-	// logging.Println("alloc seq", seq)
-	return self.startSeq
+	logging.Info("alloc seq", seq)
+	return seq
 }
 
 func (self *helper) persistentNode(n radNode, value []byte) error {
@@ -34,7 +34,7 @@ func (self *helper) persistentNode(n radNode, value []byte) error {
 	seq := strconv.FormatInt(n.Seq, 10)
 	n.OnDisk = true
 	n.Children = children
-	buf, err := json.Marshal(n)
+	buf, err := enc.Marshal(n)
 	if err != nil {
 		logging.Fatal(err)
 		return err
@@ -115,16 +115,34 @@ func (self *helper) getChildrenByNode(n *radNode) error {
 	}
 
 	if buf == nil {
-		return errors.New("get key failed")
+		if seq != ROOT_SEQ {
+			panic("")
+			logging.Fatal("can't be real", "read node", seqstr)
+		}
+
+		return fmt.Errorf("get key %s failed", seqstr)
 	}
 
 	var tmp radNode
-	err = json.Unmarshal(buf, &tmp)
+	err = enc.Unmarshal(buf, &tmp)
 	if err != nil {
 		logging.Fatal(err)
 	}
 
-	*n = tmp
+	n.Children = make([]*radNode, len(tmp.Children), len(tmp.Children))
+	copy(n.Children, tmp.Children)
+
+	n.father = nil
+	if !reflect.DeepEqual(*n, tmp) {
+		logging.Debugf("%+v, %+v", *n, tmp)
+
+		n.father = father
+		for _, e := range n.father.Children {
+			logging.Debugf("%+v", e)
+		}
+		panic("can't be real")
+	}
+	// *n = tmp
 
 	self.AddInMemoryNodeCount(len(n.Children))
 

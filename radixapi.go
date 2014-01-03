@@ -25,7 +25,7 @@ const (
 
 func init() {
 	logging.SetFlags(logging.Lshortfile | logging.LstdFlags)
-	logging.SetLevelByString("debug")
+	logging.SetLevelByString("info")
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
@@ -33,42 +33,42 @@ func init() {
 // New returns a new, empty radix tree or open exist db.
 func Open(path string) *Radix {
 	logging.Info("open db")
-	rad := &Radix{
+	tree := &Radix{
 		Root: &radNode{
 			Seq: ROOT_SEQ, OnDisk: true},
 		path: filepath.Join(path, "/db"),
 		h:    &helper{store: &Levelstorage{}, startSeq: ROOT_SEQ},
 	}
 
-	rad.lock.Lock()
-	defer rad.lock.Unlock()
+	tree.lock.Lock()
+	defer tree.lock.Unlock()
 
-	if err := rad.h.store.Open(rad.path); err != nil {
+	if err := tree.h.store.Open(tree.path); err != nil {
 		logging.Fatal(err)
 	}
 
 	// logging.Info(store.Stats())
 
-	rad.beginWriteBatch()
+	tree.beginWriteBatch()
 
-	if err := rad.h.getChildrenByNode(rad.Root); err != nil {
+	if err := tree.h.getChildrenByNode(tree.Root); err != nil {
 		// logging.Info(err)
-		rad.h.persistentNode(*rad.Root, nil)
-		rad.commitWriteBatch()
-		logging.Infof("root: %+v", rad.Root)
+		tree.h.persistentNode(*tree.Root, nil)
+		tree.commitWriteBatch()
+		logging.Infof("root: %+v", tree.Root)
 	} else {
-		rad.rollback()
-		rad.Root.OnDisk = false
-		logging.Infof("root: %+v", rad.Root)
-		_, err = rad.h.store.GetLastSeq()
-		if err != nil {
-			logging.Fatal(err)
+		tree.rollback()
+		tree.Root.OnDisk = false
+		logging.Debugf("root: %+v, last seq %d", tree.Root, tree.h.startSeq)
+		tree.h.startSeq, err = tree.h.store.GetLastSeq()
+		if err != nil || tree.h.startSeq <= 0 {
+			logging.Fatal(err, tree.h.startSeq)
 		}
 	}
 
-	rad.MaxInMemoryNodeCount = 1000
+	tree.MaxInMemoryNodeCount = 1000
 
-	return rad
+	return tree
 }
 
 func (self *Radix) addNodesCallBack() {

@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const COUNT = 20000
+const COUNT = 2000
 
 //todo: concurence test
 //random md5 key test
@@ -346,7 +346,7 @@ func TestDeleteDisk(t *testing.T) {
 
 	r = Open(".")
 
-	if s := r.Lookup("slower"); s == nil {
+	if s := r.Lookup("slow"); s != nil {
 		t.Error("expecting non nil")
 	}
 
@@ -370,7 +370,7 @@ func TestDeleteDisk(t *testing.T) {
 			t.Errorf("expecting %s found %s", "team", s)
 		}
 	}
-	if s := r.Lookup("water"); s != nil {
+	if s := r.Lookup("team"); s != nil {
 		t.Errorf("expecting nil found %v", s)
 	}
 
@@ -1091,14 +1091,14 @@ func TestConcurrentReadWrite(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	count := 20000
+	count := COUNT
 
 	for i := 0; i < count; i++ {
 		str := fmt.Sprintf("%d", i)
 		r.Insert(str, str)
 	}
 
-	goroutineCount := 20
+	goroutineCount := 10
 
 	wg := sync.WaitGroup{}
 	wg.Add(2 * goroutineCount)
@@ -1176,14 +1176,17 @@ func TestConcurrentRandomReadWrite(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	count := 20000
+	count := COUNT
 
-	goroutineCount := 20
+	goroutineCount := 10
 
 	wg := sync.WaitGroup{}
-	wg.Add(2 + goroutineCount)
+	wg.Add(2 * goroutineCount)
 	f := func() {
-		for i := 0; i < 100000; i++ {
+		for i := 0; i < 10000; i++ {
+			if i%1000 == 0 {
+				print("r")
+			}
 			k := rand.Int31n(int32(count))
 			str := fmt.Sprintf("%d", k)
 			r.GetWithVersion(str)
@@ -1192,12 +1195,15 @@ func TestConcurrentRandomReadWrite(t *testing.T) {
 		wg.Done()
 	}
 
-	for i := 0; i < 2; i++ {
+	for i := 0; i < goroutineCount; i++ {
 		go f()
 	}
 
 	w := func(start, end int) {
 		for i := start; i < end; i++ {
+			if i%1000 == 0 {
+				print("w")
+			}
 			str := fmt.Sprintf("%d", i)
 			r.Insert(str, str)
 		}
@@ -1247,4 +1253,40 @@ func TestConcurrentRandomReadWrite(t *testing.T) {
 			t.Error("expect nil")
 		}
 	}
+}
+
+func TestSimpleInsert(t *testing.T) {
+	r := Open(".")
+	defer r.Destory()
+
+	runtime.GOMAXPROCS(4)
+
+	count := COUNT
+
+	goroutineCount := 10
+
+	wg := sync.WaitGroup{}
+	wg.Add(2 * goroutineCount)
+	f := func() {
+		for i := 0; i < 10000; i++ {
+			if i%1000 == 0 {
+				print("r")
+			}
+			k := rand.Int31n(int32(count))
+			str := fmt.Sprintf("%d", k)
+			r.GetWithVersion(str)
+		}
+		log.Println("read done")
+		wg.Done()
+	}
+
+	for i := 0; i < goroutineCount; i++ {
+		go f()
+	}
+
+	runtime.Gosched()
+
+	r.Insert("200", "200")
+	r.Insert("201", "201")
+	r.Insert("0", "0")
 }

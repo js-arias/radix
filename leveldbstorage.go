@@ -21,12 +21,13 @@ var (
 
 func (self *Levelstorage) Open(path string) (err error) {
 	opts := leveldb.NewOptions()
-	opts.SetCache(leveldb.NewLRUCache(3 << 30))
+	opts.SetCache(leveldb.NewLRUCache(3 * 1024 * 1024 * 1024))
 	opts.SetCreateIfMissing(true)
 	opts.SetBlockSize(4 * 1024 * 1024)
 	opts.SetWriteBufferSize(50 * 1024 * 1024)
 	// opts.SetCompression(leveldb.SnappyCompression)
 	self.db, err = leveldb.Open(path, opts)
+	ro.SetFillCache(true)
 	return err
 }
 
@@ -64,10 +65,16 @@ func (self *Levelstorage) WriteNode(key string, value []byte) error {
 }
 
 func (self *Levelstorage) ReadNode(key string) ([]byte, error) {
+	if len(key) == 0 {
+		logging.Fatal("zero key found")
+	}
 	return self.db.Get(ro, []byte(key))
 }
 
 func (self *Levelstorage) DelNode(key string) error {
+	if len(key) == 0 {
+		logging.Fatal("zero key found")
+	}
 	self.currentBatch.Delete([]byte(key))
 	return nil
 }
@@ -93,16 +100,26 @@ func (self *Levelstorage) GetLastSeq() (int64, error) {
 }
 
 func (self *Levelstorage) DeleteKey(key string) error {
+	if len(key) == 0 {
+		logging.Fatal("zero key found")
+	}
 	self.currentBatch.Delete([]byte(key))
 	return nil
 }
 
 func (self *Levelstorage) PutKey(key string, value []byte) error {
+	if len(key) == 0 {
+		logging.Fatal("zero key found")
+	}
 	self.currentBatch.Put([]byte(key), value)
 	return nil
 }
 
 func (self *Levelstorage) GetKey(key string) ([]byte, error) {
+	if len(key) == 0 {
+		panic("")
+		logging.Fatal("zero key found")
+	}
 	return self.db.Get(ro, []byte(key))
 }
 

@@ -40,6 +40,17 @@ func (self *Radix) rollback() error {
 	return self.h.store.Rollback()
 }
 
+func (self *Radix) getIndex(n *radNode) int {
+	i := 0
+	for ; i < len(n.father.Children); i++ { //get index
+		if n.father.Children[i].Seq == n.Seq {
+			break
+		}
+	}
+
+	return i
+}
+
 func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 	var prefix string
 	var latest *radNode
@@ -113,6 +124,10 @@ func (self *Radix) deleteNode(n *radNode) {
 		if err != nil {
 			logging.Fatal(err)
 		}
+		err = self.h.persistentNode(*n.father, nil)
+		if err != nil {
+			logging.Fatal(err)
+		}
 		return
 	} else if len(n.Children) == 1 {
 		self.pathCompression(n, n.Children[0])
@@ -121,12 +136,7 @@ func (self *Radix) deleteNode(n *radNode) {
 
 	//now, n has no children, check if we need to clean father
 	//todo: binary search
-	i := 0
-	for ; i < len(n.father.Children); i++ { //get index
-		if n.father.Children[i].Seq == n.Seq {
-			break
-		}
-	}
+	i := self.getIndex(n)
 
 	self.h.delNodeFromStorage(n.Seq)
 
@@ -185,7 +195,7 @@ func (r *radNode) delete(key string, tree *Radix) []byte {
 
 // implements insert or replace, return nil, nil if this a new value
 func (r *radNode) put(key string, Value []byte, orgKey string, version int64, force bool, tree *Radix) ([]byte, error) {
-	logging.Info("insert", orgKey, "--", string(Value))
+	logging.Info("insert", orgKey, "--", string(Value), r.Prefix)
 
 	tree.h.getChildrenByNode(r)
 
@@ -202,6 +212,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 				if len(d.Value) == 0 {
 					d.Value = encodeValueToInternalKey(orgKey)
 					tree.h.persistentNode(*d, Value)
+					tree.h.persistentNode(*d.father, nil)
 					return nil, nil
 				}
 
