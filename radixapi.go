@@ -72,7 +72,7 @@ func Open(path string) *Radix {
 		}
 	}
 
-	tree.MaxInMemoryNodeCount = 1000
+	tree.MaxInMemoryNodeCount = 100000
 
 	return tree
 }

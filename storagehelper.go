@@ -129,8 +129,10 @@ func (self *helper) getChildrenByNode(n *radNode) error {
 		logging.Fatal(err)
 	}
 
-	n.Children = make([]*radNode, len(tmp.Children), len(tmp.Children))
-	copy(n.Children, tmp.Children)
+	if tmp.Children != nil {
+		n.Children = make([]*radNode, len(tmp.Children), len(tmp.Children))
+		copy(n.Children, tmp.Children)
+	}
 
 	n.father = nil
 	if !reflect.DeepEqual(*n, tmp) {
