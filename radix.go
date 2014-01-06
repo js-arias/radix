@@ -438,8 +438,6 @@ func (r *radNode) lookup(key string, tree *Radix) (*radNode, int, bool) {
 			return d, i, false
 		}
 
-		tree.h.getChildrenByNode(d)
-
 		return d.lookup(key[len(comm):], tree)
 	}
 	return nil, 0, false

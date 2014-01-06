@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const COUNT = 2000
+const COUNT = 1000000
 
 //todo: concurence test
 //random md5 key test
@@ -1266,7 +1266,7 @@ func TestSimpleInsert(t *testing.T) {
 	goroutineCount := 10
 
 	wg := sync.WaitGroup{}
-	wg.Add(2 * goroutineCount)
+	wg.Add(goroutineCount)
 	f := func() {
 		for i := 0; i < 10000; i++ {
 			if i%1000 == 0 {
@@ -1289,4 +1289,5 @@ func TestSimpleInsert(t *testing.T) {
 	r.Insert("200", "200")
 	r.Insert("201", "201")
 	r.Insert("0", "0")
+	wg.Wait()
 }

@@ -117,7 +117,7 @@ func (self *Levelstorage) PutKey(key string, value []byte) error {
 
 func (self *Levelstorage) GetKey(key string) ([]byte, error) {
 	if len(key) == 0 {
-		panic("")
+		panic("key can't be nil")
 		logging.Fatal("zero key found")
 	}
 	return self.db.Get(ro, []byte(key))

@@ -25,7 +25,7 @@ const (
 
 func init() {
 	logging.SetFlags(logging.Lshortfile | logging.LstdFlags)
-	logging.SetLevelByString("info")
+	logging.SetLevelByString("debug")
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
@@ -220,6 +220,7 @@ func (self *Radix) Lookup(key string) []byte {
 	defer self.lock.RUnlock()
 
 	if x, _, ok := self.Root.lookup(key, self); ok {
+		// logging.Debugf("GetValueFromStore %+v", x)
 		buf, err := self.h.GetValueFromStore(x.Value)
 		if err != nil {
 			return nil
@@ -258,7 +259,7 @@ func (self *Radix) GetWithVersion(key string) ([]byte, int64) {
 	self.lock.RLock()
 	defer self.lock.RUnlock()
 
-	if x, _, ok := self.Root.lookup(key, self); ok {
+	if x, _, ok := self.Root.lookup(key, self); ok && len(x.Value) > 0 {
 		buf, err := self.h.GetValueFromStore(x.Value)
 		if err != nil {
 			return nil, 0
