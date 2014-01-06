@@ -4,6 +4,8 @@ import (
 	"container/list"
 	"github.com/ngaut/logging"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"path/filepath"
 	"sync"
@@ -28,6 +30,10 @@ func init() {
 	logging.SetLevelByString("debug")
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	go func() {
+		logging.Info(http.ListenAndServe("localhost:6060", nil))
+	}()
 }
 
 // New returns a new, empty radix tree or open exist db.
@@ -169,7 +175,7 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 	start := time.Now()
 	defer func() {
 		if n := time.Since(start).Nanoseconds() / 1000 / 1000; n > 100 {
-			logging.Info("too slow insert using", n, "milsec")
+			logging.Warning("too slow insert using", n, "milsec")
 		}
 	}()
 
