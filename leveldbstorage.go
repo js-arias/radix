@@ -10,6 +10,8 @@ import (
 type Levelstorage struct {
 	currentBatch *leveldb.WriteBatch
 	db           *leveldb.DB
+	cache        *leveldb.Cache
+	opts         *leveldb.Options
 }
 
 const LAST_SEQ_KEY = "##LAST_SEQ_KEY"
@@ -20,13 +22,14 @@ var (
 )
 
 func (self *Levelstorage) Open(path string) (err error) {
-	opts := leveldb.NewOptions()
-	opts.SetCache(leveldb.NewLRUCache(3 * 1024 * 1024 * 1024))
-	opts.SetCreateIfMissing(true)
-	opts.SetBlockSize(4 * 1024 * 1024)
-	opts.SetWriteBufferSize(50 * 1024 * 1024)
+	self.opts = leveldb.NewOptions()
+	self.cache = leveldb.NewLRUCache(3 * 1024 * 1024 * 1024)
+	self.opts.SetCache(self.cache)
+	self.opts.SetCreateIfMissing(true)
+	self.opts.SetBlockSize(4 * 1024 * 1024)
+	self.opts.SetWriteBufferSize(50 * 1024 * 1024)
 	// opts.SetCompression(leveldb.SnappyCompression)
-	self.db, err = leveldb.Open(path, opts)
+	self.db, err = leveldb.Open(path, self.opts)
 	ro.SetFillCache(true)
 	return err
 }
@@ -80,6 +83,10 @@ func (self *Levelstorage) DelNode(key string) error {
 }
 
 func (self *Levelstorage) Close() error {
+	ro.Close()
+	wo.Close()
+	self.opts.Close()
+	self.cache.Close()
 	self.db.Close()
 	return nil
 }
