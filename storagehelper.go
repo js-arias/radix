@@ -3,7 +3,8 @@ package radix
 import (
 	"fmt"
 	"github.com/ngaut/logging"
-	enc "labix.org/v2/mgo/bson"
+	// enc "labix.org/v2/mgo/bson"
+	enc "encoding/json"
 	"reflect"
 	"strconv"
 	"sync"

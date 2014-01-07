@@ -12,25 +12,26 @@ type Levelstorage struct {
 	db           *leveldb.DB
 	cache        *leveldb.Cache
 	opts         *leveldb.Options
+	ro           *leveldb.ReadOptions
+	wo           *leveldb.WriteOptions
 }
 
 const LAST_SEQ_KEY = "##LAST_SEQ_KEY"
 
-var (
-	wo = leveldb.NewWriteOptions()
-	ro = leveldb.NewReadOptions()
-)
-
 func (self *Levelstorage) Open(path string) (err error) {
+	self.ro = leveldb.NewReadOptions()
+	self.wo = leveldb.NewWriteOptions()
 	self.opts = leveldb.NewOptions()
-	self.cache = leveldb.NewLRUCache(3 * 1024 * 1024 * 1024)
+	self.cache = leveldb.NewLRUCache(1 * 1024 * 1024 * 1024)
 	self.opts.SetCache(self.cache)
+	self.ro.SetFillCache(true)
+
 	self.opts.SetCreateIfMissing(true)
 	self.opts.SetBlockSize(4 * 1024 * 1024)
 	self.opts.SetWriteBufferSize(50 * 1024 * 1024)
 	// opts.SetCompression(leveldb.SnappyCompression)
 	self.db, err = leveldb.Open(path, self.opts)
-	ro.SetFillCache(true)
+
 	return err
 }
 
@@ -47,7 +48,7 @@ func (self *Levelstorage) CommitWriteBatch() error {
 	if self.currentBatch == nil {
 		logging.Fatal("need to call BeginWriteBatch first")
 	}
-	err := self.db.Write(wo, self.currentBatch)
+	err := self.db.Write(self.wo, self.currentBatch)
 	self.currentBatch.Close()
 	self.currentBatch = nil
 	return err
@@ -71,7 +72,8 @@ func (self *Levelstorage) ReadNode(key string) ([]byte, error) {
 	if len(key) == 0 {
 		logging.Fatal("zero key found")
 	}
-	return self.db.Get(ro, []byte(key))
+
+	return self.db.Get(self.ro, []byte(key))
 }
 
 func (self *Levelstorage) DelNode(key string) error {
@@ -83,11 +85,19 @@ func (self *Levelstorage) DelNode(key string) error {
 }
 
 func (self *Levelstorage) Close() error {
-	ro.Close()
-	wo.Close()
-	self.opts.Close()
-	self.cache.Close()
 	self.db.Close()
+	self.ro.Close()
+	self.wo.Close()
+	self.opts.Close()
+	if self.cache != nil {
+		self.cache.Close()
+	}
+
+	self.db = nil
+	self.ro = nil
+	self.wo = nil
+	self.opts = nil
+	self.cache = nil
 	return nil
 }
 
@@ -98,7 +108,7 @@ func (self *Levelstorage) SaveLastSeq(seq int64) error {
 }
 
 func (self *Levelstorage) GetLastSeq() (int64, error) {
-	seqstr, err := self.db.Get(ro, []byte(LAST_SEQ_KEY))
+	seqstr, err := self.db.Get(self.ro, []byte(LAST_SEQ_KEY))
 	if err != nil {
 		return -1, err
 	}
@@ -127,13 +137,13 @@ func (self *Levelstorage) GetKey(key string) ([]byte, error) {
 		panic("key can't be nil")
 		logging.Fatal("zero key found")
 	}
-	return self.db.Get(ro, []byte(key))
+	return self.db.Get(self.ro, []byte(key))
 }
 
 func (self *Levelstorage) Stats() string {
 	b := bytes.Buffer{}
 	b.WriteString("storage stats:\n")
-	it := self.db.NewIterator(ro)
+	it := self.db.NewIterator(self.ro)
 	defer it.Close()
 
 	it.SeekToFirst()
@@ -150,7 +160,7 @@ func (self *Levelstorage) Stats() string {
 // ##LAST_SEQ_KEY  ----> 19
 // -1  ----> {"Version":0,"Seq":-1,"OnDisk":true}
 func (self *Levelstorage) IsEmpty() bool {
-	it := self.db.NewIterator(ro)
+	it := self.db.NewIterator(self.ro)
 	defer it.Close()
 
 	cnt := 0

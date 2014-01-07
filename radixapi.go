@@ -72,7 +72,7 @@ func Open(path string) *Radix {
 		}
 	}
 
-	tree.MaxInMemoryNodeCount = 100000
+	tree.MaxInMemoryNodeCount = 500000
 
 	return tree
 }
@@ -82,8 +82,9 @@ func (self *Radix) addNodesCallBack() {
 		// logging.Info("need cutEdge", "current count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
 		// logging.Info("tree mem dump")
 		// self.h.DumpMemNode(self.Root, 0)
-
+		start := time.Now()
 		cutEdge(self.Root, self)
+		logging.Debug("cutEdge using", time.Since(start).Seconds(), "s")
 		// logging.Debugf("after cut%+v", self.Root)
 		// logging.Info("left count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
 	}
@@ -148,7 +149,7 @@ func (self *Radix) DumpMemTree() error {
 func (self *Radix) Delete(key string) []byte {
 	self.lock.Lock()
 	defer func() {
-		self.addNodesCallBack()
+		// self.addNodesCallBack()
 		self.lock.Unlock()
 	}()
 
