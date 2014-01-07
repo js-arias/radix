@@ -27,7 +27,7 @@ func (self *Levelstorage) Open(path string) (err error) {
 	self.ro.SetFillCache(true)
 
 	self.opts.SetCreateIfMissing(true)
-	self.opts.SetBlockSize(4 * 1024 * 1024)
+	self.opts.SetBlockSize(8 * 1024 * 1024)
 	self.opts.SetWriteBufferSize(50 * 1024 * 1024)
 	// opts.SetCompression(leveldb.SnappyCompression)
 	self.db, err = leveldb.Open(path, self.opts)

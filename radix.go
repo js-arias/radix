@@ -410,7 +410,6 @@ func (r *radNode) listByPrefixDelimiterMarker(skipRoot bool, delimiter string, l
 
 // implementats lookup: node, index, exist
 func (r *radNode) lookup(key string, tree *Radix) (*radNode, int, bool) {
-
 	tree.h.getChildrenByNode(r)
 
 	if len(key) == 0 {

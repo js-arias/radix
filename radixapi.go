@@ -84,7 +84,7 @@ func (self *Radix) addNodesCallBack() {
 		// self.h.DumpMemNode(self.Root, 0)
 		start := time.Now()
 		cutEdge(self.Root, self)
-		logging.Debug("cutEdge using", time.Since(start).Seconds(), "s")
+		logging.Info("cutEdge using", time.Since(start).Nanoseconds()/1000000000, "s")
 		// logging.Debugf("after cut%+v", self.Root)
 		// logging.Info("left count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
 	}
@@ -175,7 +175,7 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 
 	start := time.Now()
 	defer func() {
-		if n := time.Since(start).Nanoseconds() / 1000 / 1000; n > 100 {
+		if n := time.Since(start).Nanoseconds() / 1000 / 1000; n > 500 {
 			logging.Warning("too slow insert using", n, "milsec")
 		}
 	}()
