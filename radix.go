@@ -19,12 +19,16 @@ type radNode struct {
 	Version  int64      `json:"ver, omitempty"`
 	father   *radNode
 	Seq      int64 `json:"seq, omitempty"`
-	OnDisk   bool  `json:"ondisk, omitempty"`
+	Stat     int64 `json:"stat, omitempty"`
 }
 
 const (
 	RESULT_COMMON_PREFIX = 0
 	RESULT_CONTENT       = 1
+
+	statInMemory = 0
+	statLoading  = 2
+	statOnDisk   = 4
 )
 
 func (self *Radix) beginWriteBatch() {
@@ -221,7 +225,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 				}
 
 				// logging.Infof("version not match, version is %d, but you provide %d", d.Version, version)
-				return nil, fmt.Errorf("version not match, version is %d, but you provide %d", d.Version, version)
+				return nil, fmt.Errorf("key: %s, version not match, version is %d, but you provide %d", orgKey, d.Version, version)
 			}
 
 			//ex: ab, insert a
@@ -434,13 +438,17 @@ func (r *radNode) lookup(key string, tree *Radix) (*radNode, int, bool) {
 	return nil, 0, false
 }
 
+func onDisk(n *radNode) bool {
+	return n.OnDisk == statOnDisk
+}
+
 //remove this tree's children from memory
 func cutEdge(n *radNode, tree *Radix) {
 	if n == nil {
 		return
 	}
 
-	if n.OnDisk {
+	if onDisk(n) {
 		logging.Infof("%+v ondisk", n)
 		return
 	}
@@ -459,7 +467,7 @@ func cutEdge(n *radNode, tree *Radix) {
 	}
 
 	n.Children = nil
-	n.OnDisk = true
+	n.OnDisk = statOnDisk
 }
 
 func adjustFather(n *radNode) {

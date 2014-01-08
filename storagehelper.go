@@ -5,15 +5,15 @@ import (
 	"github.com/ngaut/logging"
 	//enc "labix.org/v2/mgo/bson"
 	enc "encoding/json"
+	"math/rand"
 	"reflect"
 	"strconv"
-	"sync"
 	"sync/atomic"
+	"time"
 )
 
 type helper struct {
 	store             Storage
-	loadmu            sync.Mutex
 	inmemoryNodeCount int64
 	startSeq          int64
 }
@@ -33,7 +33,7 @@ func (self *helper) persistentNode(n radNode, value []byte) error {
 	children := n.cloneChildren()
 
 	seq := strconv.FormatInt(n.Seq, 10)
-	n.OnDisk = true
+	n.OnDisk = statOnDisk
 	n.Children = children
 	buf, err := enc.Marshal(n)
 	if err != nil {
@@ -94,19 +94,10 @@ func (self *helper) GetValueFromStore(key string) ([]byte, error) {
 	return self.store.GetKey(key)
 }
 
-func (self *helper) getChildrenByNode(n *radNode) error {
-	self.loadmu.Lock() //todo: using seq and lockring to make lock less heavy
-	defer self.loadmu.Unlock()
-
-	if !n.OnDisk { //check if multithread loading the same node
-		return nil
+func (self *helper) getNodeFromDisk(n *radNode) error {
+	if n.OnDisk != statLoading { //check if multithread loading the same node
+		panic("never happend")
 	}
-	//debug msg
-	// if n.father != nil {
-	// 	logging.Println("getChildrenByNode", n.Seq, n.father.Seq)
-	// } else {
-	// 	logging.Println("getChildrenByNode", n.Seq)
-	// }
 
 	father := n.father
 	seq := n.Seq
@@ -138,6 +129,7 @@ func (self *helper) getChildrenByNode(n *radNode) error {
 	}
 
 	n.father = nil
+	tmp.OnDisk = statLoading
 	if !reflect.DeepEqual(*n, tmp) {
 		logging.Debugf("%+v, %+v", *n, tmp)
 
@@ -154,21 +146,50 @@ func (self *helper) getChildrenByNode(n *radNode) error {
 	n.father = father
 	for _, c := range n.Children {
 		c.father = n
-		if !c.OnDisk {
+		if !onDisk(c) {
 			panic("")
 		}
 	}
 
 	//check
-	if n.Seq != seq {
+	if n.Seq != tmp.Seq {
 		logging.Fatal("can't be real")
 	}
 
-	// logging.Infof("load from disk %+v", *n)
-
-	n.OnDisk = false
-
+	logging.Infof("load from disk %+v", n)
 	return err
+}
+
+func (self *helper) getChildrenByNode(n *radNode) error {
+	for {
+		stat := atomic.LoadInt64(&n.OnDisk)
+		switch stat {
+		case statOnDisk:
+			if atomic.CompareAndSwapInt64(&n.OnDisk, statOnDisk, statLoading) { //try to get ownership
+				if err := self.getNodeFromDisk(n); err != nil {
+					if !atomic.CompareAndSwapInt64(&n.OnDisk, statLoading, statInMemory) {
+						panic("never happend")
+					}
+					return err
+				}
+
+				if !atomic.CompareAndSwapInt64(&n.OnDisk, statLoading, statInMemory) {
+					panic("never happend")
+				}
+				return nil
+			} else { //someone is loading it
+				n := rand.Int31n(100)
+				time.Sleep(time.Duration(n) * time.Microsecond)
+			}
+		case statInMemory:
+			return nil
+		case statLoading:
+			n := rand.Int31n(100)
+			time.Sleep(time.Duration(n) * time.Microsecond)
+		default:
+			logging.Fatal("error stat", stat)
+		}
+	}
 }
 
 func (r *radNode) cloneChildren() []*radNode {
@@ -177,7 +198,7 @@ func (r *radNode) cloneChildren() []*radNode {
 		e := &radNode{}
 		*e = *d //copy it
 		e.Children = nil
-		e.OnDisk = true
+		e.OnDisk = statOnDisk
 		nodes = append(nodes, e)
 	}
 
@@ -215,7 +236,7 @@ func (self *helper) DumpMemNode(node *radNode, level int) error {
 		return nil
 	}
 
-	if node.OnDisk {
+	if onDisk(node) {
 		return nil
 	}
 

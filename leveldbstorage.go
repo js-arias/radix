@@ -2,6 +2,7 @@ package radix
 
 import (
 	"bytes"
+	"fmt"
 	leveldb "github.com/jmhodges/levigo"
 	"github.com/ngaut/logging"
 	"strconv"
@@ -111,6 +112,10 @@ func (self *Levelstorage) GetLastSeq() (int64, error) {
 	seqstr, err := self.db.Get(self.ro, LAST_SEQ_KEY)
 	if err != nil {
 		return -1, err
+	}
+
+	if seqstr == nil {
+		return -1, fmt.Errorf("%s doesn't exist", string(LAST_SEQ_KEY))
 	}
 
 	return strconv.ParseInt(string(seqstr), 10, 64)
