@@ -1265,7 +1265,7 @@ func TestSimpleInsert(t *testing.T) {
 
 	runtime.GOMAXPROCS(4)
 
-	count := COUNT
+	count := 10000
 
 	goroutineCount := 5
 

@@ -78,13 +78,14 @@ func Open(path string) *Radix {
 }
 
 func (self *Radix) addNodesCallBack() {
-	if self.h.GetInMemoryNodeCount() > self.MaxInMemoryNodeCount {
+	count := self.h.GetInMemoryNodeCount()
+	if count > self.MaxInMemoryNodeCount {
 		// logging.Info("need cutEdge", "current count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
 		// logging.Info("tree mem dump")
 		// self.h.DumpMemNode(self.Root, 0)
 		start := time.Now()
 		cutEdge(self.Root, self)
-		logging.Info("cutEdge using", time.Since(start).Nanoseconds()/1000000000, "s")
+		logging.Debug("cutEdge using", time.Since(start).Nanoseconds()/1000000000, "s", "count", count, "left", self.h.GetInMemoryNodeCount())
 		// logging.Debugf("after cut%+v", self.Root)
 		// logging.Info("left count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
 	}

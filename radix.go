@@ -69,8 +69,9 @@ func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 			logging.Fatal(err)
 		}
 
-		//cleanup n
+		self.h.AddInMemoryNodeCount(-1)
 
+		//cleanup n
 		n = n.father
 	}
 
@@ -86,6 +87,7 @@ func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 	if err != nil {
 		logging.Fatal(err)
 	}
+	self.h.AddInMemoryNodeCount(-1)
 
 	leaf.Prefix = prefix + leaf.Prefix
 	leaf.Seq = latest.Seq
@@ -139,6 +141,7 @@ func (self *Radix) deleteNode(n *radNode) {
 	i := self.getIndex(n)
 
 	self.h.delNodeFromStorage(n.Seq)
+	self.h.AddInMemoryNodeCount(-1)
 
 	//n is leaf node
 	if len(n.father.Children) > 1 {
@@ -149,8 +152,6 @@ func (self *Radix) deleteNode(n *radNode) {
 			n.father.Children = append(n.father.Children[:i], n.father.Children[i+1:]...)
 		}
 
-		self.h.AddInMemoryNodeCount(-1)
-
 		if len(n.father.Children) == 1 { //if there is only node after remove, we can do combine
 			self.pathCompression(n.father, n.father.Children[0])
 			return
@@ -160,7 +161,6 @@ func (self *Radix) deleteNode(n *radNode) {
 	} else if len(n.father.Children) == 1 {
 		n.father.Children[0] = nil
 		n.father.Children = nil
-		self.h.AddInMemoryNodeCount(-1)
 
 		if len(n.father.Value) == 0 {
 			logging.Info("recursive delete")
@@ -453,7 +453,7 @@ func cutEdge(n *radNode, tree *Radix) {
 		return
 	}
 
-	if tree.h.GetInMemoryNodeCount() < tree.MaxInMemoryNodeCount {
+	if tree.h.GetInMemoryNodeCount()+tree.MaxInMemoryNodeCount/5 < tree.MaxInMemoryNodeCount {
 		return
 	}
 
@@ -463,12 +463,11 @@ func cutEdge(n *radNode, tree *Radix) {
 		logging.Info("cut seq", n.Children[i].Seq, "internal key", n.Children[i].Value, "father seq", n.Children[i].father.Seq, "len(father.children)", len(n.Children))
 		n.Children[i].father = nil
 		n.Children[i] = nil
+		tree.h.AddInMemoryNodeCount(-1)
 	}
 
 	n.Children = nil
 	n.OnDisk = true
-
-	tree.h.AddInMemoryNodeCount(-(len(n.Children) + 1))
 }
 
 func adjustFather(n *radNode) {
