@@ -41,7 +41,7 @@ func Open(path string) *Radix {
 	logging.Info("open db")
 	tree := &Radix{
 		Root: &radNode{
-			Seq: ROOT_SEQ, OnDisk: statOnDisk},
+			Seq: ROOT_SEQ, Stat: statOnDisk},
 		path: filepath.Join(path, "/db"),
 		h:    &helper{store: &Levelstorage{}, startSeq: ROOT_SEQ},
 	}
@@ -64,7 +64,7 @@ func Open(path string) *Radix {
 		logging.Infof("root: %+v", tree.Root)
 	} else {
 		tree.rollback()
-		tree.Root.OnDisk = statInMemory
+		tree.Root.Stat = statInMemory
 		logging.Debugf("root: %+v, last seq %d", tree.Root, tree.h.startSeq)
 		tree.h.startSeq, err = tree.h.store.GetLastSeq()
 		if err != nil || tree.h.startSeq < 0 {

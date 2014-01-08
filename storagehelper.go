@@ -33,7 +33,7 @@ func (self *helper) persistentNode(n radNode, value []byte) error {
 	children := n.cloneChildren()
 
 	seq := strconv.FormatInt(n.Seq, 10)
-	n.OnDisk = statOnDisk
+	n.Stat = statOnDisk
 	n.Children = children
 	buf, err := enc.Marshal(n)
 	if err != nil {
@@ -95,7 +95,7 @@ func (self *helper) GetValueFromStore(key string) ([]byte, error) {
 }
 
 func (self *helper) getNodeFromDisk(n *radNode) error {
-	if n.OnDisk != statLoading { //check if multithread loading the same node
+	if n.Stat != statLoading { //check if multithread loading the same node
 		panic("never happend")
 	}
 
@@ -129,7 +129,7 @@ func (self *helper) getNodeFromDisk(n *radNode) error {
 	}
 
 	n.father = nil
-	tmp.OnDisk = statLoading
+	tmp.Stat = statLoading
 	if !reflect.DeepEqual(*n, tmp) {
 		logging.Debugf("%+v, %+v", *n, tmp)
 
@@ -162,18 +162,18 @@ func (self *helper) getNodeFromDisk(n *radNode) error {
 
 func (self *helper) getChildrenByNode(n *radNode) error {
 	for {
-		stat := atomic.LoadInt64(&n.OnDisk)
+		stat := atomic.LoadInt64(&n.Stat)
 		switch stat {
 		case statOnDisk:
-			if atomic.CompareAndSwapInt64(&n.OnDisk, statOnDisk, statLoading) { //try to get ownership
+			if atomic.CompareAndSwapInt64(&n.Stat, statOnDisk, statLoading) { //try to get ownership
 				if err := self.getNodeFromDisk(n); err != nil {
-					if !atomic.CompareAndSwapInt64(&n.OnDisk, statLoading, statInMemory) {
+					if !atomic.CompareAndSwapInt64(&n.Stat, statLoading, statInMemory) {
 						panic("never happend")
 					}
 					return err
 				}
 
-				if !atomic.CompareAndSwapInt64(&n.OnDisk, statLoading, statInMemory) {
+				if !atomic.CompareAndSwapInt64(&n.Stat, statLoading, statInMemory) {
 					panic("never happend")
 				}
 				return nil
@@ -198,7 +198,7 @@ func (r *radNode) cloneChildren() []*radNode {
 		e := &radNode{}
 		*e = *d //copy it
 		e.Children = nil
-		e.OnDisk = statOnDisk
+		e.Stat = statOnDisk
 		nodes = append(nodes, e)
 	}
 

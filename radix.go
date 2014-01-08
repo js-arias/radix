@@ -439,7 +439,7 @@ func (r *radNode) lookup(key string, tree *Radix) (*radNode, int, bool) {
 }
 
 func onDisk(n *radNode) bool {
-	return n.OnDisk == statOnDisk
+	return n.Stat == statOnDisk
 }
 
 //remove this tree's children from memory
@@ -467,7 +467,7 @@ func cutEdge(n *radNode, tree *Radix) {
 	}
 
 	n.Children = nil
-	n.OnDisk = statOnDisk
+	n.Stat = statOnDisk
 }
 
 func adjustFather(n *radNode) {
