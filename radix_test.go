@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const COUNT = 300000
+const COUNT = 8000000
 
 //todo: concurence test
 //random md5 key test
@@ -677,15 +677,17 @@ func TestLookupByPrefixAndDelimiter_limit_marker1(t *testing.T) {
 func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 	r := Open(".")
 
+	count := COUNT / 100
+
 	start := time.Now()
-	for i := 0; i < COUNT; i++ {
+	for i := 0; i < count; i++ {
 		key := fmt.Sprintf("2013/%d", i)
 		r.Insert(key, "")
 		if i%10000 == 0 {
 			print(".")
 		}
 	}
-	log.Println("Insert", COUNT, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+	log.Println("Insert", count, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
 	r.Close()
 
 	r = Open(".")
@@ -695,7 +697,7 @@ func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 	if l.Len() != 1 {
 		t.Errorf("should got 1, but we got %d", l.Len())
 	}
-	log.Println("lookup", COUNT, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+	log.Println("lookup", count, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
 
 	r.Close()
 
@@ -703,9 +705,9 @@ func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 	defer r.Destory()
 
 	start = time.Now()
-	l = r.LookupByPrefixAndDelimiter("2", "#", COUNT/10, 10, "2013/1")
-	if l.Len() != COUNT/10 {
-		t.Errorf("should got %d, but we got %d", COUNT/10, l.Len())
+	l = r.LookupByPrefixAndDelimiter("2", "#", int32(count/10), 10, "2013/1")
+	if l.Len() != count/10 {
+		t.Errorf("should got %d, but we got %d", count/10, l.Len())
 		for s := l.Front(); s != nil; s = s.Next() {
 			log.Println(s.Value)
 		}
@@ -723,8 +725,10 @@ func TestLookupByPrefixAndDelimiter_complex_many_bigkey(t *testing.T) {
 		b.WriteByte('c')
 	}
 
+	count := COUNT / 100
+
 	buf := b.String()
-	for i := 0; i < COUNT; i++ {
+	for i := 0; i < count; i++ {
 		key := fmt.Sprintf("2013/%d", i)
 		r.Insert(key+buf, string(b.Bytes()))
 		if i%10000 == 0 {
@@ -734,7 +738,7 @@ func TestLookupByPrefixAndDelimiter_complex_many_bigkey(t *testing.T) {
 
 	r.Close()
 
-	log.Println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$big key Insert", COUNT, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+	log.Println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$big key Insert", count, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
 
 	r = Open(".")
 
@@ -743,7 +747,7 @@ func TestLookupByPrefixAndDelimiter_complex_many_bigkey(t *testing.T) {
 	if l.Len() != 1 {
 		t.Errorf("should got 1, but we got %d", l.Len())
 	}
-	log.Println("lookup", COUNT, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
+	log.Println("lookup", count, "using:", time.Since(start).Nanoseconds()/1000000000, " sec")
 
 	r.Close()
 
@@ -751,9 +755,9 @@ func TestLookupByPrefixAndDelimiter_complex_many_bigkey(t *testing.T) {
 	defer r.Destory()
 
 	start = time.Now()
-	l = r.LookupByPrefixAndDelimiter("2", "#", COUNT/10, 10, "2013/1")
-	if l.Len() != COUNT/10 {
-		t.Errorf("should got %d, but we got %d", COUNT/10, l.Len())
+	l = r.LookupByPrefixAndDelimiter("2", "#", int32(count/10), 10, "2013/1")
+	if l.Len() != count/10 {
+		t.Errorf("should got %d, but we got %d", count/10, l.Len())
 		for v := l.Front(); v != nil; v = v.Next() {
 			log.Println(v.Value)
 		}
@@ -1091,7 +1095,7 @@ func TestConcurrentReadWrite(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	count := COUNT
+	count := COUNT / 100
 
 	for i := 0; i < count; i++ {
 		str := fmt.Sprintf("%d", i)

@@ -453,6 +453,10 @@ func cutEdge(n *radNode, tree *Radix) {
 		return
 	}
 
+	if tree.h.GetInMemoryNodeCount() < tree.MaxInMemoryNodeCount {
+		return
+	}
+
 	for i, node := range n.Children {
 		cutEdge(node, tree)
 

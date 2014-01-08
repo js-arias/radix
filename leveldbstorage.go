@@ -16,7 +16,7 @@ type Levelstorage struct {
 	wo           *leveldb.WriteOptions
 }
 
-const LAST_SEQ_KEY = "##LAST_SEQ_KEY"
+var LAST_SEQ_KEY = []byte("##LAST_SEQ_KEY")
 
 func (self *Levelstorage) Open(path string) (err error) {
 	self.ro = leveldb.NewReadOptions()
@@ -103,12 +103,12 @@ func (self *Levelstorage) Close() error {
 
 func (self *Levelstorage) SaveLastSeq(seq int64) error {
 	seqstr := strconv.FormatInt(seq, 10)
-	self.currentBatch.Put([]byte(LAST_SEQ_KEY), []byte(seqstr))
+	self.currentBatch.Put(LAST_SEQ_KEY, []byte(seqstr))
 	return nil
 }
 
 func (self *Levelstorage) GetLastSeq() (int64, error) {
-	seqstr, err := self.db.Get(self.ro, []byte(LAST_SEQ_KEY))
+	seqstr, err := self.db.Get(self.ro, LAST_SEQ_KEY)
 	if err != nil {
 		return -1, err
 	}
