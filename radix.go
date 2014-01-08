@@ -9,7 +9,6 @@ import (
 
 //todo:
 // api
-// cut edge, limit count of nodes in memory
 // gc performance test
 
 // a node of a radix tree
@@ -41,14 +40,13 @@ func (self *Radix) rollback() error {
 }
 
 func (self *Radix) getIndex(n *radNode) int {
-	i := 0
-	for ; i < len(n.father.Children); i++ { //get index
+	for i := 0; i < len(n.father.Children); i++ { //get index
 		if n.father.Children[i].Seq == n.Seq {
-			break
+			return i
 		}
 	}
 
-	return i
+	return -1
 }
 
 func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
@@ -69,8 +67,6 @@ func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 			logging.Fatal(err)
 		}
 
-		self.h.AddInMemoryNodeCount(-1)
-
 		//cleanup n
 		n = n.father
 	}
@@ -87,16 +83,13 @@ func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 	if err != nil {
 		logging.Fatal(err)
 	}
-	self.h.AddInMemoryNodeCount(-1)
 
 	leaf.Prefix = prefix + leaf.Prefix
 	leaf.Seq = latest.Seq
 	leaf.father = latest.father
 
 	*latest = *leaf
-	for _, c := range latest.Children {
-		c.father = latest
-	}
+	adjustFather(latest)
 
 	logging.Infof("persistent %+v, %+v", latest.father, latest)
 	self.h.persistentNode(*latest, nil)
@@ -141,7 +134,6 @@ func (self *Radix) deleteNode(n *radNode) {
 	i := self.getIndex(n)
 
 	self.h.delNodeFromStorage(n.Seq)
-	self.h.AddInMemoryNodeCount(-1)
 
 	//n is leaf node
 	if len(n.father.Children) > 1 {

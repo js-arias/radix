@@ -64,6 +64,8 @@ func (self *helper) delNodeFromStorage(seq int64) error {
 		return err
 	}
 
+	self.AddInMemoryNodeCount(-1)
+
 	return nil
 }
 
@@ -93,7 +95,7 @@ func (self *helper) GetValueFromStore(key string) ([]byte, error) {
 }
 
 func (self *helper) getChildrenByNode(n *radNode) error {
-	self.loadmu.Lock() //todo: using seq and hashring to make lock less heivy
+	self.loadmu.Lock() //todo: using seq and lockring to make lock less heavy
 	defer self.loadmu.Unlock()
 
 	if !n.OnDisk { //check if multithread loading the same node
