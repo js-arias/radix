@@ -193,12 +193,11 @@ func (self *helper) getChildrenByNode(n *radNode) error {
 }
 
 func (r *radNode) cloneChildren() []*radNode {
-	nodes := make([]*radNode, 0)
+	nodes := make([]*radNode, 0, len(r.Children))
 	for _, d := range r.Children {
 		e := &radNode{}
 		*e = *d //copy it
-		e.Children = nil
-		e.Stat = statOnDisk
+		setOnDisk(e)
 		nodes = append(nodes, e)
 	}
 

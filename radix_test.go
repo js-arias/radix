@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const COUNT = 2000000
+const COUNT = 100000
 
 //todo: concurence test
 //random md5 key test
@@ -1090,6 +1090,45 @@ func TestOnDiskDelete(t *testing.T) {
 	}
 }
 
+func TestCutEdge(t *testing.T) {
+	r := Open(".")
+	defer r.Destory()
+
+	r.SetMaxInMemoryNodeCount(600)
+
+	count := 1000
+
+	for i := 0; i < count; i++ {
+		str := fmt.Sprintf("%d", i)
+		r.Insert(str, str)
+	}
+
+	for i := 0; i < count; i++ {
+		str := fmt.Sprintf("%d", i)
+		old := r.Delete(str)
+
+		if string(old) != str {
+			t.Errorf("delete value not match old %s expect %s", string(old), str)
+		}
+	}
+
+	for _, d := range r.Root.Children {
+		t.Errorf("should be empty tree %+v", d)
+	}
+
+	if !r.h.store.IsEmpty() {
+		t.Error("should be empty", r.Stats())
+	}
+
+	for i := 0; i < count; i++ {
+		str := fmt.Sprintf("%d", i)
+		old := r.Delete(str)
+		if old != nil {
+			t.Error("expect nil")
+		}
+	}
+}
+
 func TestConcurrentReadWrite(t *testing.T) {
 	runtime.GOMAXPROCS(4)
 	r := Open(".")
@@ -1239,6 +1278,8 @@ func TestConcurrentRandomReadWrite(t *testing.T) {
 	for i := 0; i < goroutineCount; i++ {
 		go d(i*count/goroutineCount, (i+1)*count/goroutineCount)
 	}
+
+	log.Println("starting delete")
 
 	wg.Wait()
 

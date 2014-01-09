@@ -19,11 +19,21 @@ type Radix struct {
 	path                 string
 	MaxInMemoryNodeCount int64
 	h                    *helper
+	stats                Stats
 }
 
 const (
 	invalid_version = -1
 )
+
+type Stats struct {
+	insertSuccess int64
+	insertFailed  int64
+	getSuccess    int64
+	getFailed     int64
+	cuts          int64
+	lists         int64
+}
 
 func init() {
 	logging.SetFlags(logging.Lshortfile | logging.LstdFlags)
@@ -87,6 +97,8 @@ func (self *Radix) addNodesCallBack() {
 		start := time.Now()
 		cutEdge(self.Root, self)
 		logging.Debug("cutEdge using", time.Since(start).Nanoseconds()/1000000000, "s", "count", count, "left", self.h.GetInMemoryNodeCount())
+		self.stats.cuts++
+		logging.Debugf("%+v", self.stats)
 		// logging.Debugf("after cut%+v", self.Root)
 		// logging.Info("left count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
 	}
@@ -185,6 +197,7 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 	self.beginWriteBatch()
 	oldvalue, err := self.Root.put(key, []byte(Value), key, invalid_version, false, self)
 	if err != nil {
+		self.stats.insertFailed++
 		logging.Info(err)
 		self.commitWriteBatch()
 		return nil, err
@@ -192,9 +205,12 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 
 	err = self.commitWriteBatch()
 	if err != nil {
+		self.stats.insertFailed++
 		logging.Fatal(err)
 		return nil, err
 	}
+
+	self.stats.insertSuccess++
 
 	return oldvalue, nil
 }
@@ -271,11 +287,15 @@ func (self *Radix) GetWithVersion(key string) ([]byte, int64) {
 	if x, _, ok := self.Root.lookup(key, self); ok && len(x.Value) > 0 {
 		buf, err := self.h.GetValueFromStore(x.Value)
 		if err != nil {
+			self.stats.getFailed++
 			return nil, -1
 		}
+
+		self.stats.getSuccess++
 		return buf, x.Version
 	}
 
+	self.stats.getFailed++
 	return nil, -1
 }
 
