@@ -443,31 +443,39 @@ func onDisk(n *radNode) bool {
 }
 
 //remove this tree's children from memory
-func cutEdge(n *radNode, tree *Radix) {
+func cutEdge(n *radNode, tree *Radix) (finish bool) {
 	if n == nil {
-		return
+		return true
 	}
 
 	if onDisk(n) {
 		logging.Infof("%+v ondisk", n)
-		return
+		return true
 	}
 
 	if tree.h.GetInMemoryNodeCount()+tree.MaxInMemoryNodeCount/5 < tree.MaxInMemoryNodeCount {
-		return
+		return false
 	}
 
+	finish = true
 	for i, node := range n.Children {
-		cutEdge(node, tree)
-
-		logging.Info("cut seq", n.Children[i].Seq, "internal key", n.Children[i].Value, "father seq", n.Children[i].father.Seq, "len(father.children)", len(n.Children))
-		n.Children[i].father = nil
-		n.Children[i] = nil
-		tree.h.AddInMemoryNodeCount(-1)
+		if cutEdge(node, tree) {
+			logging.Info("cut seq", n.Children[i].Seq, "internal key", n.Children[i].Value, "father seq", n.Children[i].father.Seq, "len(father.children)", len(n.Children))
+			node.Stat = statOnDisk
+			node.Children = nil
+			tree.h.AddInMemoryNodeCount(-1)
+		} else {
+			finish = false
+			break
+		}
 	}
 
-	n.Children = nil
-	n.Stat = statOnDisk
+	if finish {
+		n.Children = nil
+		n.Stat = statOnDisk
+	}
+
+	return finish
 }
 
 func adjustFather(n *radNode) {
