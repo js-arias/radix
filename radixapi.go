@@ -32,7 +32,7 @@ func init() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 
 	go func() {
-		logging.Info(http.ListenAndServe("localhost:6060", nil))
+		logging.Info(http.ListenAndServe(":6060", nil))
 	}()
 }
 
@@ -271,12 +271,12 @@ func (self *Radix) GetWithVersion(key string) ([]byte, int64) {
 	if x, _, ok := self.Root.lookup(key, self); ok && len(x.Value) > 0 {
 		buf, err := self.h.GetValueFromStore(x.Value)
 		if err != nil {
-			return nil, 0
+			return nil, -1
 		}
 		return buf, x.Version
 	}
 
-	return nil, 0
+	return nil, -1
 }
 
 func (self *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, limitCount int32, limitLevel int, marker string) *list.List {
