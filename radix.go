@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"fmt"
 	"github.com/ngaut/logging"
+	"math/rand"
 	"strings"
 )
 
@@ -438,6 +439,19 @@ func (r *radNode) lookup(key string, tree *Radix) (*radNode, int, bool) {
 	return nil, 0, false
 }
 
+// implementats lookup: node, index, exist
+func getInMemChildrenCount(n *radNode, cnt *int) {
+	if onDisk(n) {
+		return
+	}
+
+	*cnt++
+
+	for _, c := range n.Children {
+		getInMemChildrenCount(c, cnt)
+	}
+}
+
 func onDisk(n *radNode) bool {
 	return n.Stat == statOnDisk
 }
@@ -447,14 +461,36 @@ func setOnDisk(n *radNode) {
 	n.Children = nil
 }
 
-//remove this tree's children from memory, only cut leaf node
-func cutEdge(n *radNode, tree *Radix) (finish bool) {
+func cutAll(n *radNode, tree *Radix) {
 	setOnDisk(n)
 
 	cnt := -1 * int(tree.h.GetInMemoryNodeCount())
 	tree.h.AddInMemoryNodeCount(cnt)
+}
 
-	return true
+func randomCut(n *radNode, tree *Radix) {
+	target := rand.Intn(len(n.Children))
+
+	//get children count
+	childrenCnt := 0
+	getInMemChildrenCount(n.Children[target], &childrenCnt)
+	if childrenCnt > 1 {
+		setOnDisk(n.Children[target])
+		tree.h.AddInMemoryNodeCount(-childrenCnt)
+	}
+}
+
+//remove this tree's children from memory, only cut leaf node
+func cutEdge(n *radNode, tree *Radix) int {
+	if n == nil || onDisk(n) || len(n.Children) == 0 {
+		return 0
+	}
+
+	befortCut := tree.h.GetInMemoryNodeCount()
+	randomCut(n, tree)
+	afterCut := tree.h.GetInMemoryNodeCount()
+
+	return int(afterCut - befortCut)
 }
 
 func adjustFather(n *radNode) {

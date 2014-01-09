@@ -73,6 +73,45 @@ func TestInsertion(t *testing.T) {
 	}
 }
 
+func TestGetChildrenCnt(t *testing.T) {
+	r := Open(".")
+	defer r.Destory()
+
+	r.Insert("1", "1")
+	r.Insert("11", "11")
+	r.Insert("12", "12")
+	cnt := 0
+	getInMemChildrenCount(r.Root.Children[0], &cnt)
+	if cnt != 3 {
+		t.Errorf("should be 3, but we got %d", cnt)
+	}
+
+	cnt = 0
+	getInMemChildrenCount(r.Root.Children[0].Children[0], &cnt)
+	if cnt != 1 {
+		t.Errorf("should be 1, but we got %d", cnt)
+	}
+
+	cnt = 0
+	getInMemChildrenCount(r.Root.Children[0].Children[1], &cnt)
+	if cnt != 1 {
+		t.Errorf("should be 1, but we got %d", cnt)
+	}
+
+	r.Insert("111", "111")
+	cnt = 0
+	getInMemChildrenCount(r.Root.Children[0].Children[0], &cnt)
+	if cnt != 2 {
+		t.Errorf("should be 1, but we got %d", cnt)
+	}
+
+	cnt = 0
+	getInMemChildrenCount(r.Root.Children[0].Children[1], &cnt)
+	if cnt != 1 {
+		t.Errorf("should be 1, but we got %d", cnt)
+	}
+}
+
 func TestCas(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
