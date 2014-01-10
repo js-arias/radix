@@ -23,7 +23,7 @@ func (self *Levelstorage) Open(path string) (err error) {
 	self.ro = leveldb.NewReadOptions()
 	self.wo = leveldb.NewWriteOptions()
 	self.opts = leveldb.NewOptions()
-	self.cache = leveldb.NewLRUCache(1 * 1024 * 1024 * 1024)
+	self.cache = leveldb.NewLRUCache(10 * 1024 * 1024 * 1024)
 	self.opts.SetCache(self.cache)
 	self.ro.SetFillCache(true)
 
@@ -145,7 +145,16 @@ func (self *Levelstorage) GetKey(key string) ([]byte, error) {
 	return self.db.Get(self.ro, []byte(key))
 }
 
+func (self *Levelstorage) internalStats() string {
+	property := self.db.PropertyValue("leveldb.stats")
+	return property
+}
+
 func (self *Levelstorage) Stats() string {
+	return self.internalStats()
+}
+
+func (self *Levelstorage) dumpAll() string {
 	b := bytes.Buffer{}
 	b.WriteString("storage stats:\n")
 	it := self.db.NewIterator(self.ro)
