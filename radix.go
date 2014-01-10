@@ -82,7 +82,7 @@ func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 		return
 	}
 
-	self.h.getChildrenByNode(leaf) //we need to copy child if leaf is no disk
+	self.h.getChildrenByNode(leaf) //we need to copy child if leaf is on disk
 
 	err := self.h.delNodeFromStorage(leaf.Seq)
 	if err != nil {
@@ -445,10 +445,9 @@ func getInMemChildrenCount(n *radNode, cnt *int) {
 		return
 	}
 
-	*cnt++
-
 	for _, c := range n.Children {
 		getInMemChildrenCount(c, cnt)
+		*cnt++
 	}
 }
 
@@ -468,26 +467,45 @@ func cutAll(n *radNode, tree *Radix) {
 	tree.h.AddInMemoryNodeCount(cnt)
 }
 
-func randomCut(n *radNode, tree *Radix) {
+func randomCut(n *radNode, tree *Radix) (retry bool) {
 	target := rand.Intn(len(n.Children))
+
+	if onDisk(n.Children[target]) {
+		return true
+	}
+
+	for _, c := range n.Children {
+		childrenCnt := 0
+		getInMemChildrenCount(c, &childrenCnt)
+		logging.Debugf("prefix %s, children count %d", c.Prefix, childrenCnt)
+	}
 
 	//get children count
 	childrenCnt := 0
 	getInMemChildrenCount(n.Children[target], &childrenCnt)
 	if childrenCnt > 1 {
+		logging.Debugf("cut prefix %s, childrenCnt %d, father children count %d", n.Children[target].Prefix, childrenCnt, len(n.Children))
 		setOnDisk(n.Children[target])
 		tree.h.AddInMemoryNodeCount(-childrenCnt)
+		return false
 	}
+
+	return true
 }
 
 //remove this tree's children from memory, only cut leaf node
 func cutEdge(n *radNode, tree *Radix) int {
-	if n == nil || onDisk(n) || len(n.Children) == 0 {
+	if n == nil || onDisk(n) || len(n.Children) == 0 { //todo: handle only one child
 		return 0
 	}
 
 	befortCut := tree.h.GetInMemoryNodeCount()
-	randomCut(n, tree)
+	for i := 0; i < 5; i++ { //max try
+		if retry := randomCut(n, tree); !retry {
+			break
+		}
+		logging.Debug("retry")
+	}
 	afterCut := tree.h.GetInMemoryNodeCount()
 
 	return int(afterCut - befortCut)

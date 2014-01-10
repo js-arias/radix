@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const COUNT = 100000
+const COUNT = 3000000
 
 //todo: concurence test
 //random md5 key test
@@ -82,10 +82,23 @@ func TestGetChildrenCnt(t *testing.T) {
 	r.Insert("12", "12")
 	cnt := 0
 	getInMemChildrenCount(r.Root.Children[0], &cnt)
-	if cnt != 3 {
+	if cnt != 2 {
 		t.Errorf("should be 3, but we got %d", cnt)
 	}
 
+	cnt = 0
+	getInMemChildrenCount(r.Root.Children[0].Children[0], &cnt)
+	if cnt != 0 {
+		t.Errorf("should be 1, but we got %d", cnt)
+	}
+
+	cnt = 0
+	getInMemChildrenCount(r.Root.Children[0].Children[1], &cnt)
+	if cnt != 0 {
+		t.Errorf("should be 1, but we got %d", cnt)
+	}
+
+	r.Insert("111", "111")
 	cnt = 0
 	getInMemChildrenCount(r.Root.Children[0].Children[0], &cnt)
 	if cnt != 1 {
@@ -94,11 +107,11 @@ func TestGetChildrenCnt(t *testing.T) {
 
 	cnt = 0
 	getInMemChildrenCount(r.Root.Children[0].Children[1], &cnt)
-	if cnt != 1 {
+	if cnt != 0 {
 		t.Errorf("should be 1, but we got %d", cnt)
 	}
 
-	r.Insert("111", "111")
+	r.Insert("1111", "1111")
 	cnt = 0
 	getInMemChildrenCount(r.Root.Children[0].Children[0], &cnt)
 	if cnt != 2 {
@@ -107,7 +120,7 @@ func TestGetChildrenCnt(t *testing.T) {
 
 	cnt = 0
 	getInMemChildrenCount(r.Root.Children[0].Children[1], &cnt)
-	if cnt != 1 {
+	if cnt != 0 {
 		t.Errorf("should be 1, but we got %d", cnt)
 	}
 }

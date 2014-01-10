@@ -4,6 +4,7 @@ import (
 	"container/list"
 	"github.com/ngaut/logging"
 	"log"
+	"math/rand"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -40,6 +41,8 @@ func init() {
 	logging.SetLevelByString("debug")
 
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
+	rand.Seed(time.Now().UnixNano())
 
 	go func() {
 		logging.Info(http.ListenAndServe(":6060", nil))
@@ -83,33 +86,32 @@ func Open(path string) *Radix {
 		}
 	}
 
-	tree.MaxInMemoryNodeCount = 50000
+	tree.MaxInMemoryNodeCount = 500000
 
 	return tree
 }
 
 func (self *Radix) addNodesCallBack() {
+	count := self.h.GetInMemoryNodeCount()
 
-	for {
-		count := self.h.GetInMemoryNodeCount()
-		if count < self.MaxInMemoryNodeCount {
-			return
-		}
-
-		self.stats.cuts++
-		// logging.Info("need cutEdge", "current count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
-		// logging.Info("tree mem dump")
-		// self.h.DumpMemNode(self.Root, 0)
-		start := time.Now()
-		if cutEdge(self.Root, self) == 0 {
-			return
-		}
-		logging.Debug("cutEdge using", time.Since(start).Nanoseconds()/1000000000, "s", "count", count, "left", self.h.GetInMemoryNodeCount())
-
-		logging.Debugf("%+v", self.stats)
-		// logging.Debugf("after cut%+v", self.Root)
-		// logging.Info("left count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
+	if count < self.MaxInMemoryNodeCount {
+		return
 	}
+
+	self.stats.cuts++
+	// logging.Info("need cutEdge", "current count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
+	// logging.Info("tree mem dump")
+	// self.h.DumpMemNode(self.Root, 0)
+	start := time.Now()
+	if cutEdge(self.Root, self) == 0 {
+		logging.Warning("cutEdge using", time.Since(start).Nanoseconds()/1000000000, "s", "count", count, "left", self.h.GetInMemoryNodeCount())
+		return
+	}
+	logging.Debug("cutEdge using", time.Since(start).Nanoseconds()/1000000000, "s", "count", count, "left", self.h.GetInMemoryNodeCount())
+
+	logging.Debugf("%+v", self.stats)
+	// logging.Debugf("after cut%+v", self.Root)
+	// logging.Info("left count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
 }
 
 func (self *Radix) cleanup() error {
@@ -167,7 +169,6 @@ func (self *Radix) DumpMemTree() error {
 }
 
 // Delete removes the Value associated with a particular key and returns it.
-//todo: using transaction
 func (self *Radix) Delete(key string) []byte {
 	self.lock.Lock()
 	defer func() {
