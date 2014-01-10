@@ -21,6 +21,9 @@ type Radix struct {
 	MaxInMemoryNodeCount int64
 	h                    *helper
 	stats                Stats
+
+	//for calc
+	lastInsertNodeCnt int64
 }
 
 const (
@@ -110,13 +113,17 @@ func (self *Radix) addNodesCallBack() {
 	}
 	logging.Debug("cutEdge using", time.Since(start).Nanoseconds()/1000000000, "s", "count", count, "left", self.h.GetInMemoryNodeCount())
 
-	insertCnt := count - self.h.GetInMemoryNodeCount()
+	if self.lastInsertNodeCnt == 0 {
+		self.lastInsertNodeCnt = self.stats.insertSuccess
+	}
+	insertCnt := self.stats.insertSuccess - self.lastInsertNodeCnt
 	sec := time.Since(self.stats.lastCut).Seconds()
 	if sec > 0 {
 		logging.Debugf("%+v, speed %d", self.stats, int64(float64(insertCnt)/sec))
 	}
 
 	self.stats.lastCut = time.Now()
+	self.lastInsertNodeCnt = self.stats.insertSuccess
 	// logging.Debugf("after cut%+v", self.Root)
 	// logging.Info("left count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
 }
