@@ -474,11 +474,11 @@ func randomCut(n *radNode, tree *Radix) (retry bool) {
 		return true
 	}
 
-	for _, c := range n.Children {
-		childrenCnt := 0
-		getInMemChildrenCount(c, &childrenCnt)
-		logging.Debugf("prefix %s, children count %d", c.Prefix, childrenCnt)
-	}
+	// for _, c := range n.Children {
+	// 	childrenCnt := 0
+	// 	getInMemChildrenCount(c, &childrenCnt)
+	// 	logging.Debugf("prefix %s, children count %d", c.Prefix, childrenCnt)
+	// }
 
 	//get children count
 	childrenCnt := 0
