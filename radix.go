@@ -110,7 +110,7 @@ func (self *Radix) deleteNode(n *radNode) {
 	logging.Infof("deleteNode %+v, %+v", n, n.father)
 	//remove from storage
 	if len(n.Value) > 0 {
-		err := self.h.delFromStoragebyKey(n.Value)
+		err := self.h.delFromStoragebyKey(n.Value) //should not dec in memory node count
 		if err != nil {
 			logging.Fatal(err)
 		}
