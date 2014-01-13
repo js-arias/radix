@@ -14,13 +14,13 @@ import (
 
 // a node of a radix tree
 type radNode struct {
-	Prefix   string     `json:"p,omitempty"` // current prefix of the node
-	Children []*radNode `json:"c,omitempty"`
-	Value    string     `json:"val,omitempty"` // stored key
-	Version  int64      `json:"ver, omitempty"`
+	Prefix   string // current prefix of the node
+	Children []*radNode
+	Value    string // stored key
+	Version  int64
 	father   *radNode
-	Seq      int64 `json:"seq, omitempty"`
-	Stat     int64 `json:"stat, omitempty"`
+	Seq      int64
+	Stat     int64
 }
 
 const (
@@ -474,17 +474,18 @@ func randomCut(n *radNode, tree *Radix) (retry bool) {
 		return true
 	}
 
-	// for _, c := range n.Children {
-	// 	childrenCnt := 0
-	// 	getInMemChildrenCount(c, &childrenCnt)
-	// 	logging.Debugf("prefix %s, children count %d", c.Prefix, childrenCnt)
-	// }
+	for _, c := range n.Children {
+		childrenCnt := 0
+		getInMemChildrenCount(c, &childrenCnt)
+		logging.Debugf("prefix %s, children count %d", c.Prefix, childrenCnt)
+	}
 
 	//get children count
 	childrenCnt := 0
 	getInMemChildrenCount(n.Children[target], &childrenCnt)
 	if childrenCnt > 1 {
-		logging.Debugf("cut prefix %s, childrenCnt %d, father children count %d", n.Children[target].Prefix, childrenCnt, len(n.Children))
+		logging.Debugf("inmemory: %d, cut prefix %s, childrenCnt %d, father children count %d", tree.h.GetInMemoryNodeCount(),
+			n.Children[target].Prefix, childrenCnt, len(n.Children))
 		setOnDisk(n.Children[target])
 		tree.h.AddInMemoryNodeCount(-childrenCnt)
 		return false

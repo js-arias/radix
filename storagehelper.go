@@ -22,8 +22,7 @@ type radDiskNode struct {
 	Children []int64 `json:"c,omitempty"`
 	Value    string  `json:"val,omitempty"` // stored key
 	Version  int64   `json:"ver, omitempty"`
-	Seq      int64   `json:"seq, omitempty"`
-	Stat     int64   `json:"stat, omitempty"`
+	Seq      int64   `json:"seq"`
 }
 
 func (self *helper) allocSeq() int64 {
@@ -39,7 +38,7 @@ func (self *helper) allocSeq() int64 {
 
 func (self *helper) makeRadDiskNode(n *radNode) *radDiskNode {
 	return &radDiskNode{Prefix: n.Prefix, Children: n.cloneChildrenSeq(), Value: n.Value, Version: n.Version,
-		Seq: n.Seq, Stat: statOnDisk}
+		Seq: n.Seq}
 }
 
 func (self *helper) makeRadNode(x *radDiskNode) *radNode {
@@ -57,7 +56,7 @@ func (self *helper) persistentNode(n *radNode, value []byte) error {
 		return err
 	}
 
-	logging.Info("persistentNode", n.Value, string(buf))
+	// logging.Info("persistentNode", n.Value, string(buf))
 	if err = self.store.WriteNode(seq, buf); err != nil {
 		logging.Fatal(err)
 	}
@@ -75,6 +74,12 @@ func (self *helper) persistentNode(n *radNode, value []byte) error {
 
 func (self *helper) delNodeFromStorage(seq int64) error {
 	seqStr := strconv.FormatInt(seq, 10)
+	//check exist
+	buf, err := self.store.ReadNode(seqStr)
+	if err != nil || buf == nil {
+		panic("")
+	}
+
 	if err := self.store.DelNode(seqStr); err != nil {
 		logging.Fatal(err)
 		return err
@@ -166,9 +171,6 @@ func (self *helper) getNodeFromDisk(n *radNode) error {
 		}
 
 		node := self.makeRadNode(x)
-		if !onDisk(node) { //check
-			panic("")
-		}
 		node.father = n
 		n.Children[i] = node
 	}

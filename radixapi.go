@@ -148,6 +148,10 @@ func (self *Radix) addNodesCallBack() {
 	self.lastInsertNodeCnt = self.stats.insertSuccess
 	// logging.Debugf("after cut%+v", self.Root)
 	// logging.Info("left count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
+
+	if self.h.GetInMemoryNodeCount() < 0 {
+		panic("never happend")
+	}
 }
 
 func (self *Radix) cleanup() error {
