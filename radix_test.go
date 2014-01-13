@@ -380,6 +380,8 @@ func TestDeleteDisk(t *testing.T) {
 		}
 	}
 
+	log.Println(r.Stats())
+
 	r.Close()
 
 	r = Open(".")
@@ -1314,7 +1316,7 @@ func TestConcurrentRandomReadWrite(t *testing.T) {
 
 	wg.Wait()
 
-	log.Println(r.Stats())
+	// log.Println(r.Stats())
 
 	wg.Add(goroutineCount)
 

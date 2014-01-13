@@ -6,7 +6,6 @@ import (
 	//enc "labix.org/v2/mgo/bson"
 	enc "encoding/json"
 	"math/rand"
-	"reflect"
 	"strconv"
 	"sync/atomic"
 	"time"
@@ -16,6 +15,15 @@ type helper struct {
 	store             Storage
 	inmemoryNodeCount int64
 	startSeq          int64
+}
+
+type radDiskNode struct {
+	Prefix   string  `json:"p,omitempty"` // current prefix of the node
+	Children []int64 `json:"c,omitempty"`
+	Value    string  `json:"val,omitempty"` // stored key
+	Version  int64   `json:"ver, omitempty"`
+	Seq      int64   `json:"seq, omitempty"`
+	Stat     int64   `json:"stat, omitempty"`
 }
 
 func (self *helper) allocSeq() int64 {
@@ -29,24 +37,32 @@ func (self *helper) allocSeq() int64 {
 	return seq
 }
 
-func (self *helper) persistentNode(n radNode, value []byte) error {
-	children := n.cloneChildren()
+func (self *helper) makeRadDiskNode(n *radNode) *radDiskNode {
+	return &radDiskNode{Prefix: n.Prefix, Children: n.cloneChildrenSeq(), Value: n.Value, Version: n.Version,
+		Seq: n.Seq, Stat: statOnDisk}
+}
 
-	seq := strconv.FormatInt(n.Seq, 10)
-	n.Stat = statOnDisk
-	n.Children = children
-	buf, err := enc.Marshal(n)
+func (self *helper) makeRadNode(x *radDiskNode) *radNode {
+	return &radNode{Prefix: x.Prefix, Children: nil, Value: x.Value, Version: x.Version,
+		Seq: x.Seq, Stat: statOnDisk}
+}
+
+func (self *helper) persistentNode(n *radNode, value []byte) error {
+	x := self.makeRadDiskNode(n)
+
+	seq := strconv.FormatInt(x.Seq, 10)
+	buf, err := enc.Marshal(x)
 	if err != nil {
 		logging.Fatal(err)
 		return err
 	}
 
-	// logging.Println("persistentNode", n.Value, string(buf))
+	logging.Info("persistentNode", n.Value, string(buf))
 	if err = self.store.WriteNode(seq, buf); err != nil {
 		logging.Fatal(err)
 	}
 
-	if len(n.Value) > 0 && value != nil { //key exist
+	if len(x.Value) > 0 && value != nil { //key exist
 		// logging.Println("putkey", n.Value, string(value))
 		if err = self.store.PutKey(n.Value, value); err != nil {
 			logging.Fatal(err)
@@ -94,66 +110,67 @@ func (self *helper) GetValueFromStore(key string) ([]byte, error) {
 	return self.store.GetKey(key)
 }
 
+func (self *helper) readRadDiskNode(seq int64) (*radDiskNode, error) {
+	buf, err := self.store.ReadNode(strconv.FormatInt(seq, 10))
+	if err != nil {
+		logging.Fatal(err, seq)
+		return nil, err
+	}
+
+	// logging.Debug(seq, string(buf))
+
+	if buf == nil { //when database is empty
+		return nil, fmt.Errorf("get key %d failed", seq)
+	}
+
+	var x radDiskNode
+	err = enc.Unmarshal(buf, &x)
+	if err != nil {
+		logging.Fatal(err)
+		return nil, err
+	}
+
+	return &x, nil
+}
+
 func (self *helper) getNodeFromDisk(n *radNode) error {
 	if n.Stat != statLoading { //check if multithread loading the same node
 		panic("never happend")
 	}
 
-	father := n.father
-	seq := n.Seq
-	seqstr := strconv.FormatInt(n.Seq, 10)
-	buf, err := self.store.ReadNode(seqstr)
+	tmp, err := self.readRadDiskNode(n.Seq)
 	if err != nil {
-		logging.Fatal(err, n.Seq)
-		return err
-	}
-
-	if buf == nil {
-		if seq != ROOT_SEQ {
-			panic("")
-			logging.Fatal("can't be real", "read node", seqstr)
+		if n.Seq != ROOT_SEQ {
+			panic(err.Error())
+			logging.Fatal("can't be real", "read node", n.Seq)
 		}
-
-		return fmt.Errorf("get key %s failed", seqstr)
+		if tmp == nil {
+			return fmt.Errorf("get key %d failed", n.Seq)
+		}
 	}
 
-	var tmp radNode
-	err = enc.Unmarshal(buf, &tmp)
-	if err != nil {
-		logging.Fatal(err)
-	}
-
-	if tmp.Children != nil {
+	logging.Infof("%+v", tmp)
+	if len(tmp.Children) > 0 {
 		n.Children = make([]*radNode, len(tmp.Children), len(tmp.Children))
-		copy(n.Children, tmp.Children)
+		self.AddInMemoryNodeCount(len(n.Children))
 	}
 
-	n.father = nil
-	tmp.Stat = statLoading
-	if !reflect.DeepEqual(*n, tmp) {
-		logging.Debugf("%+v, %+v", *n, tmp)
-
-		n.father = father
-		for _, e := range n.father.Children {
-			logging.Debugf("%+v", e)
+	for i, seq := range tmp.Children {
+		x, err := self.readRadDiskNode(seq)
+		if err != nil { //check
+			panic(err.Error())
 		}
-		panic("can't be real")
-	}
-	// *n = tmp
+		if x.Seq != seq { //check
+			logging.Errorf("seq not match, expect %d got %d, %+v", seq, x.Seq, x)
+			panic("never happend")
+		}
 
-	self.AddInMemoryNodeCount(len(n.Children))
-
-	n.father = father
-	for _, c := range n.Children {
-		c.father = n
-		if !onDisk(c) {
+		node := self.makeRadNode(x)
+		if !onDisk(node) { //check
 			panic("")
 		}
-	}
-
-	//check
-	if n.Seq != tmp.Seq {
-		logging.Fatal("can't be real")
+		node.father = n
+		n.Children[i] = node
 	}
 
 	logging.Infof("load from disk %+v", n)
@@ -192,13 +209,10 @@ func (self *helper) getChildrenByNode(n *radNode) error {
 	}
 }
 
-func (r *radNode) cloneChildren() []*radNode {
-	nodes := make([]*radNode, 0, len(r.Children))
-	for _, d := range r.Children {
-		e := &radNode{}
-		*e = *d //copy it
-		setOnDisk(e)
-		nodes = append(nodes, e)
+func (r *radNode) cloneChildrenSeq() []int64 {
+	nodes := make([]int64, len(r.Children), len(r.Children))
+	for i, d := range r.Children {
+		nodes[i] = d.Seq
 	}
 
 	return nodes

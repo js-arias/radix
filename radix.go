@@ -60,7 +60,7 @@ func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 	logging.Infof("pathCompression %+v, %+v", n, leaf)
 	if n.Seq == ROOT_SEQ {
 		logging.Infof("persistent %+v", n)
-		self.h.persistentNode(*n, nil)
+		self.h.persistentNode(n, nil)
 		return
 	}
 
@@ -78,7 +78,7 @@ func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 
 	if latest == nil {
 		logging.Infof("persistent %+v", n)
-		self.h.persistentNode(*n, nil)
+		self.h.persistentNode(n, nil)
 		return
 	}
 
@@ -97,13 +97,13 @@ func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 	adjustFather(latest)
 
 	logging.Infof("persistent %+v, %+v", latest.father, latest)
-	self.h.persistentNode(*latest, nil)
-	self.h.persistentNode(*latest.father, nil)
+	self.h.persistentNode(latest, nil)
+	self.h.persistentNode(latest.father, nil)
 }
 
 func (self *Radix) deleteNode(n *radNode) {
 	if n.Seq == ROOT_SEQ { //root
-		self.h.persistentNode(*n, nil)
+		self.h.persistentNode(n, nil)
 		return
 	}
 
@@ -120,11 +120,11 @@ func (self *Radix) deleteNode(n *radNode) {
 	logging.Info(n.Seq, n.father.Seq)
 	if len(n.Children) > 1 {
 		logging.Infof("persistent %+v", n)
-		err := self.h.persistentNode(*n, nil)
+		err := self.h.persistentNode(n, nil)
 		if err != nil {
 			logging.Fatal(err)
 		}
-		err = self.h.persistentNode(*n.father, nil)
+		err = self.h.persistentNode(n.father, nil)
 		if err != nil {
 			logging.Fatal(err)
 		}
@@ -154,7 +154,7 @@ func (self *Radix) deleteNode(n *radNode) {
 			return
 		}
 
-		self.h.persistentNode(*n.father, nil)
+		self.h.persistentNode(n.father, nil)
 	} else if len(n.father.Children) == 1 {
 		n.father.Children[0] = nil
 		n.father.Children = nil
@@ -164,7 +164,7 @@ func (self *Radix) deleteNode(n *radNode) {
 			self.deleteNode(n.father) //recursive find & delete
 		} else {
 			logging.Infof("persistent %+v, %d", n.father, len(n.father.Value))
-			self.h.persistentNode(*n.father, nil)
+			self.h.persistentNode(n.father, nil)
 		}
 	} else {
 		panic("never happend")
@@ -208,8 +208,8 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 			if len(comm) == len(d.Prefix) {
 				if len(d.Value) == 0 {
 					d.Value = encodeValueToInternalKey(orgKey)
-					tree.h.persistentNode(*d, Value)
-					tree.h.persistentNode(*d.father, nil)
+					tree.h.persistentNode(d, Value)
+					tree.h.persistentNode(d.father, nil)
 					return nil, nil
 				}
 
@@ -220,8 +220,8 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 						logging.Fatal(err)
 					}
 					d.Version++
-					tree.h.persistentNode(*d, Value)
-					tree.h.persistentNode(*d.father, nil)
+					tree.h.persistentNode(d, Value)
+					tree.h.persistentNode(d.father, nil)
 					return orgValue, nil
 				}
 
@@ -241,14 +241,14 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 			adjustFather(n)
 			tree.h.AddInMemoryNodeCount(1)
 
-			tree.h.persistentNode(*n, nil)
+			tree.h.persistentNode(n, nil)
 
 			d.Children = make([]*radNode, 1, 1)
 			d.Children[0] = n
 			d.Prefix = comm
 			d.Value = encodeValueToInternalKey(orgKey)
-			tree.h.persistentNode(*d, Value)
-			tree.h.persistentNode(*d.father, nil)
+			tree.h.persistentNode(d, Value)
+			tree.h.persistentNode(d.father, nil)
 			return nil, nil
 		}
 
@@ -269,7 +269,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 		adjustFather(p)
 		tree.h.AddInMemoryNodeCount(1)
 
-		tree.h.persistentNode(*p, nil)
+		tree.h.persistentNode(p, nil)
 		n := &radNode{
 			Prefix: key[len(comm):],
 			Value:  encodeValueToInternalKey(orgKey),
@@ -278,7 +278,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 		}
 		tree.h.AddInMemoryNodeCount(1)
 
-		tree.h.persistentNode(*n, Value)
+		tree.h.persistentNode(n, Value)
 
 		d.Prefix = comm
 		d.Value = ""
@@ -286,8 +286,8 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 		d.Children[0] = p
 		d.Children[1] = n
 
-		tree.h.persistentNode(*d, nil)
-		tree.h.persistentNode(*d.father, nil)
+		tree.h.persistentNode(d, nil)
+		tree.h.persistentNode(d.father, nil)
 		return nil, nil
 	}
 
@@ -298,9 +298,9 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 		Seq:    tree.h.allocSeq(),
 	}
 	tree.h.AddInMemoryNodeCount(1)
-	tree.h.persistentNode(*n, Value)
+	tree.h.persistentNode(n, Value)
 	r.Children = append(r.Children, n)
-	tree.h.persistentNode(*r, nil)
+	tree.h.persistentNode(r, nil)
 
 	return nil, nil
 }

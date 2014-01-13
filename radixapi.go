@@ -78,7 +78,7 @@ func Open(path string) *Radix {
 
 	if err := tree.h.getChildrenByNode(tree.Root); err != nil {
 		// logging.Info(err)
-		tree.h.persistentNode(*tree.Root, nil)
+		tree.h.persistentNode(tree.Root, nil)
 		tree.commitWriteBatch()
 		logging.Infof("root: %+v", tree.Root)
 	} else {
@@ -104,7 +104,11 @@ func Open(path string) *Radix {
 func (self *Radix) superVistor() {
 	for {
 		select {
-		case <-self.tick.C:
+		case _, ok := <-self.tick.C:
+			if !ok {
+				return
+			}
+
 			self.lock.Lock()
 			self.addNodesCallBack()
 			self.lock.Unlock()

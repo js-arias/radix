@@ -151,7 +151,7 @@ func (self *Levelstorage) internalStats() string {
 }
 
 func (self *Levelstorage) Stats() string {
-	return self.internalStats()
+	return self.dumpAll() //self.internalStats()
 }
 
 func (self *Levelstorage) dumpAll() string {
