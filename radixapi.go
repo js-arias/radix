@@ -24,6 +24,8 @@ type Radix struct {
 
 	//for calc
 	lastInsertNodeCnt int64
+
+	tick *time.Ticker
 }
 
 const (
@@ -92,7 +94,23 @@ func Open(path string) *Radix {
 
 	tree.MaxInMemoryNodeCount = 500000
 
+	tree.tick = time.NewTicker(5 * time.Second)
+
+	go tree.superVistor()
+
 	return tree
+}
+
+func (self *Radix) superVistor() {
+	for {
+		select {
+		case <-self.tick.C:
+			self.lock.Lock()
+			self.addNodesCallBack()
+			self.lock.Unlock()
+			logging.Debug("tick for checking nodes")
+		}
+	}
 }
 
 func (self *Radix) addNodesCallBack() {
@@ -129,6 +147,7 @@ func (self *Radix) addNodesCallBack() {
 }
 
 func (self *Radix) cleanup() error {
+	self.tick.Stop()
 	self.h.ResetInMemoryNodeCount()
 	return self.h.store.Close()
 }
