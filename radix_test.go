@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const COUNT = 10000000
+const COUNT = 10000
 
 //todo: concurence test
 //random md5 key test
