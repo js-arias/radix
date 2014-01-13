@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const COUNT = 1000000
+const COUNT = 10000000
 
 //todo: concurence test
 //random md5 key test
@@ -1270,6 +1270,8 @@ func TestConcurrentRandomReadWrite(t *testing.T) {
 	runtime.GOMAXPROCS(4)
 	r := Open(".")
 	defer r.Destory()
+
+	log.Println(r.Stats())
 
 	count := COUNT
 

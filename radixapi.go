@@ -184,6 +184,8 @@ func (self *Radix) DumpMemTree() error {
 
 // Delete removes the Value associated with a particular key and returns it.
 func (self *Radix) Delete(key string) []byte {
+	self.tryTouch(key)
+
 	self.lock.Lock()
 	defer func() {
 		// self.addNodesCallBack()
@@ -204,6 +206,8 @@ func (self *Radix) Delete(key string) []byte {
 
 // Insert put a Value in the radix. It returns old value if exist
 func (self *Radix) Insert(key string, Value string) ([]byte, error) {
+	self.tryTouch(key)
+
 	self.lock.Lock()
 	defer func() {
 		self.addNodesCallBack()
@@ -239,6 +243,8 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 }
 
 func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) {
+	self.tryTouch(key)
+
 	self.lock.Lock()
 	defer func() {
 		self.addNodesCallBack()
@@ -260,6 +266,18 @@ func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) 
 	}
 
 	return oldvalue, nil
+}
+
+//using RLock to load tree into memory
+func (self *Radix) tryTouch(key string) {
+	if self.h.GetInMemoryNodeCount() < self.MaxInMemoryNodeCount/2 {
+		return
+	}
+
+	self.lock.RLock()
+	defer self.lock.RUnlock()
+
+	self.Root.lookup(key, self)
 }
 
 // Lookup searches for a particular string in the tree.
