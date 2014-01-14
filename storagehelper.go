@@ -74,12 +74,6 @@ func (self *helper) persistentNode(n *radNode, value []byte) error {
 
 func (self *helper) delNodeFromStorage(seq int64) error {
 	seqStr := strconv.FormatInt(seq, 10)
-	//check exist
-	buf, err := self.store.ReadNode(seqStr)
-	if err != nil || buf == nil {
-		panic("")
-	}
-
 	if err := self.store.DelNode(seqStr); err != nil {
 		logging.Fatal(err)
 		return err

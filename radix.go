@@ -110,7 +110,7 @@ func (self *Radix) deleteNode(n *radNode) {
 	logging.Infof("deleteNode %+v, %+v", n, n.father)
 	//remove from storage
 	if len(n.Value) > 0 {
-		err := self.h.delFromStoragebyKey(n.Value) //should not dec in memory node count
+		err := self.h.delFromStoragebyKey(n.Value)
 		if err != nil {
 			logging.Fatal(err)
 		}
@@ -439,15 +439,14 @@ func (r *radNode) lookup(key string, tree *Radix) (*radNode, int, bool) {
 	return nil, 0, false
 }
 
-// implementats lookup: node, index, exist
-func getInMemChildrenCount(n *radNode, cnt *int) {
+func getInMemChildrenCount(n *radNode, cnt *int) { //including root
+	*cnt++
 	if onDisk(n) {
 		return
 	}
 
 	for _, c := range n.Children {
 		getInMemChildrenCount(c, cnt)
-		*cnt++
 	}
 }
 
@@ -460,24 +459,33 @@ func setOnDisk(n *radNode) {
 	n.Children = nil
 }
 
-func cutAll(n *radNode, tree *Radix) {
+func cutAll(n *radNode, tree *Radix) int {
 	setOnDisk(n)
 
 	cnt := -1 * int(tree.h.GetInMemoryNodeCount())
 	tree.h.AddInMemoryNodeCount(cnt)
+	return cnt
 }
 
 func randomCut(n *radNode, tree *Radix) (retry bool) {
 	target := rand.Intn(len(n.Children))
 
-	if onDisk(n.Children[target]) {
+	if onDisk(n.Children[target]) || len(n.Children[target].Children) == 0 {
 		return true
 	}
 
+	sum := 0
 	for _, c := range n.Children {
 		childrenCnt := 0
 		getInMemChildrenCount(c, &childrenCnt)
 		logging.Debugf("prefix %s, children count %d", c.Prefix, childrenCnt)
+		sum += childrenCnt
+	}
+
+	if int64(sum) != tree.h.GetInMemoryNodeCount() {
+		// tree.h.DumpNode(tree.Root, 0)
+		logging.Errorf("sum: %d, max: %d, InMemoryNodeCount %d", sum, tree.MaxInMemoryNodeCount, tree.h.GetInMemoryNodeCount())
+		panic("")
 	}
 
 	//get children count
@@ -487,19 +495,14 @@ func randomCut(n *radNode, tree *Radix) (retry bool) {
 		logging.Debugf("inmemory: %d, cut prefix %s, childrenCnt %d, father children count %d", tree.h.GetInMemoryNodeCount(),
 			n.Children[target].Prefix, childrenCnt, len(n.Children))
 		setOnDisk(n.Children[target])
-		tree.h.AddInMemoryNodeCount(-childrenCnt)
+		tree.h.AddInMemoryNodeCount(-childrenCnt + 1) //exclude root node
 		return false
 	}
 
 	return true
 }
 
-//remove this tree's children from memory, only cut leaf node
-func cutEdge(n *radNode, tree *Radix) int {
-	if n == nil || onDisk(n) || len(n.Children) == 0 { //todo: handle only one child
-		return 0
-	}
-
+func doRandomCut(n *radNode, tree *Radix) int {
 	befortCut := tree.h.GetInMemoryNodeCount()
 	for i := 0; i < 5; i++ { //max try
 		if retry := randomCut(n, tree); !retry {
@@ -510,6 +513,15 @@ func cutEdge(n *radNode, tree *Radix) int {
 	afterCut := tree.h.GetInMemoryNodeCount()
 
 	return int(afterCut - befortCut)
+}
+
+//remove this tree's children from memory, only cut leaf node
+func cutEdge(n *radNode, tree *Radix) int {
+	if n == nil || onDisk(n) || len(n.Children) == 0 { //todo: handle only one child
+		return 0
+	}
+
+	return doRandomCut(n, tree)
 }
 
 func adjustFather(n *radNode) {

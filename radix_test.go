@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const COUNT = 1000000
+const COUNT = 10000000
 
 //todo: concurence test
 //random md5 key test
@@ -82,23 +82,10 @@ func TestGetChildrenCnt(t *testing.T) {
 	r.Insert("12", "12")
 	cnt := 0
 	getInMemChildrenCount(r.Root.Children[0], &cnt)
-	if cnt != 2 {
+	if cnt != 3 {
 		t.Errorf("should be 3, but we got %d", cnt)
 	}
 
-	cnt = 0
-	getInMemChildrenCount(r.Root.Children[0].Children[0], &cnt)
-	if cnt != 0 {
-		t.Errorf("should be 1, but we got %d", cnt)
-	}
-
-	cnt = 0
-	getInMemChildrenCount(r.Root.Children[0].Children[1], &cnt)
-	if cnt != 0 {
-		t.Errorf("should be 1, but we got %d", cnt)
-	}
-
-	r.Insert("111", "111")
 	cnt = 0
 	getInMemChildrenCount(r.Root.Children[0].Children[0], &cnt)
 	if cnt != 1 {
@@ -107,21 +94,40 @@ func TestGetChildrenCnt(t *testing.T) {
 
 	cnt = 0
 	getInMemChildrenCount(r.Root.Children[0].Children[1], &cnt)
-	if cnt != 0 {
+	if cnt != 1 {
+		t.Errorf("should be 1, but we got %d", cnt)
+	}
+
+	r.Insert("111", "111")
+	cnt = 0
+	getInMemChildrenCount(r.Root.Children[0].Children[0], &cnt)
+	if cnt != 2 {
+		t.Errorf("should be 2, but we got %d", cnt)
+	}
+
+	cnt = 0
+	getInMemChildrenCount(r.Root.Children[0].Children[1], &cnt)
+	if cnt != 1 {
 		t.Errorf("should be 1, but we got %d", cnt)
 	}
 
 	r.Insert("1111", "1111")
 	cnt = 0
 	getInMemChildrenCount(r.Root.Children[0].Children[0], &cnt)
-	if cnt != 2 {
-		t.Errorf("should be 1, but we got %d", cnt)
+	if cnt != 3 {
+		t.Errorf("should be 3, but we got %d", cnt)
 	}
 
 	cnt = 0
 	getInMemChildrenCount(r.Root.Children[0].Children[1], &cnt)
-	if cnt != 0 {
+	if cnt != 1 {
 		t.Errorf("should be 1, but we got %d", cnt)
+	}
+
+	cnt = 0
+	getInMemChildrenCount(r.Root.Children[0], &cnt)
+	if cnt != 5 {
+		t.Errorf("should be 5, but we got %d", cnt)
 	}
 }
 
@@ -1322,6 +1328,9 @@ func TestConcurrentRandomReadWrite(t *testing.T) {
 
 	d := func(start, end int) {
 		for i := start; i < end; i++ {
+			if i%1000 == 0 {
+				print("d")
+			}
 			str := fmt.Sprintf("%d", i)
 			old := r.Delete(str)
 

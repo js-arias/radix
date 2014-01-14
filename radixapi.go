@@ -125,8 +125,8 @@ func (self *Radix) addNodesCallBack() {
 	}
 
 	self.stats.cuts++
-	// logging.Info("need cutEdge", "current count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
-	// logging.Info("tree mem dump")
+	// logging.Debug("need cutEdge", "current count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
+	// logging.Debug("tree mem dump")
 	// self.h.DumpMemNode(self.Root, 0)
 	start := time.Now()
 	if cutEdge(self.Root, self) == 0 {
@@ -134,6 +134,10 @@ func (self *Radix) addNodesCallBack() {
 		return
 	}
 	logging.Debug("cutEdge using", time.Since(start).Nanoseconds()/1000000000, "s", "count", count, "left", self.h.GetInMemoryNodeCount())
+
+	if self.h.GetInMemoryNodeCount() < 0 {
+		panic("never happend")
+	}
 
 	if self.lastInsertNodeCnt == 0 {
 		self.lastInsertNodeCnt = self.stats.insertSuccess
@@ -148,10 +152,6 @@ func (self *Radix) addNodesCallBack() {
 	self.lastInsertNodeCnt = self.stats.insertSuccess
 	// logging.Debugf("after cut%+v", self.Root)
 	// logging.Info("left count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
-
-	if self.h.GetInMemoryNodeCount() < 0 {
-		panic("never happend")
-	}
 }
 
 func (self *Radix) cleanup() error {
