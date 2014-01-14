@@ -525,7 +525,7 @@ func cutEdge(n *radNode, tree *Radix) int {
 		return 0
 	}
 
-	return doRandomCut(n, tree)
+	return cutAll(n, tree) //doRandomCut(n, tree)
 }
 
 func adjustFather(n *radNode) {
