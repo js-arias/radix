@@ -23,14 +23,14 @@ func (self *Levelstorage) Open(path string) (err error) {
 	self.ro = leveldb.NewReadOptions()
 	self.wo = leveldb.NewWriteOptions()
 	self.opts = leveldb.NewOptions()
-	self.cache = leveldb.NewLRUCache(1 * 1024 * 1024 * 1024)
+	self.cache = leveldb.NewLRUCache(10 * 1024 * 1024 * 1024)
 	self.opts.SetCache(self.cache)
 	self.ro.SetFillCache(true)
 
 	self.opts.SetCreateIfMissing(true)
 	self.opts.SetBlockSize(8 * 1024 * 1024)
 	self.opts.SetWriteBufferSize(50 * 1024 * 1024)
-	self.opts.SetCompression(leveldb.SnappyCompression)
+	// self.opts.SetCompression(leveldb.SnappyCompression)
 	self.db, err = leveldb.Open(path, self.opts)
 
 	return err
