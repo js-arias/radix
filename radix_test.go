@@ -466,6 +466,14 @@ func TestLookupByPrefixAndDelimiter(t *testing.T) {
 			log.Println(s.Value)
 		}
 	}
+
+	l = r.LookupByPrefixAndDelimiter("test123", "/", 100, 100, "")
+	if l.Len() != 1 {
+		t.Errorf("should got 6, but we got %d", l.Len())
+		for s := l.Front(); s != nil; s = s.Next() {
+			log.Println(s.Value)
+		}
+	}
 }
 
 func TestLookupByPrefixAndDelimiterWith1Child(t *testing.T) {
@@ -480,23 +488,23 @@ func TestLookupByPrefixAndDelimiterWith1Child(t *testing.T) {
 	r.Insert("tester", "test")
 
 	if r.GetFirstLevelChildrenCount("t") != 1 {
-		t.Error("should be 0")
+		t.Error("should be 1")
 	}
 
 	if r.GetFirstLevelChildrenCount("te") != 1 {
-		t.Error("should be 0")
+		t.Error("should be 1")
 	}
 
 	if r.GetFirstLevelChildrenCount("tes") != 1 {
-		t.Error("should be 0")
+		t.Error("should be 1")
 	}
 
 	if r.GetFirstLevelChildrenCount("test") != 1 {
-		t.Error("should be 0")
+		t.Error("should be 1")
 	}
 
 	if r.GetFirstLevelChildrenCount("teste") != 1 {
-		t.Error("should be 0")
+		t.Error("should be 1")
 	}
 
 	r.Delete("teste")
@@ -665,7 +673,7 @@ func TestLookupByPrefixAndDelimiter_limit(t *testing.T) {
 
 	l = r.LookupByPrefixAndDelimiter("t", "/", 3, 100, "")
 	if l.Len() != 3 {
-		t.Errorf("should got 2, but we got %d", l.Len())
+		t.Errorf("should got 3, but we got %d", l.Len())
 		for v := l.Front(); v != nil; v = v.Next() {
 			log.Println(v.Value)
 		}
@@ -673,7 +681,7 @@ func TestLookupByPrefixAndDelimiter_limit(t *testing.T) {
 
 	l = r.LookupByPrefixAndDelimiter("t", "/", 10, 100, "")
 	if l.Len() != 6 {
-		t.Errorf("should got 2, but we got %d", l.Len())
+		t.Errorf("should got 6, but we got %d", l.Len())
 		for v := l.Front(); v != nil; v = v.Next() {
 			log.Println(v.Value)
 		}
@@ -1093,6 +1101,45 @@ func TestConcurrent(t *testing.T) {
 	}
 
 	log.Printf("%+v", r.Root)
+
+	for _, d := range r.Root.Children {
+		t.Errorf("should be empty tree %+v", d)
+	}
+
+	if !r.h.store.IsEmpty() {
+		t.Error("should be empty", r.Stats())
+	}
+
+	for i := 0; i < count; i++ {
+		str := fmt.Sprintf("%d", i)
+		old := r.Delete(str)
+		if old != nil {
+			t.Error("expect nil")
+		}
+	}
+}
+
+func TestOnDiskDeleteCut(t *testing.T) {
+	r := Open(".")
+	defer r.Destory()
+
+	r.SetMaxInMemoryNodeCount(2)
+
+	count := 21
+
+	for i := 0; i < count; i++ {
+		str := fmt.Sprintf("%d", i)
+		r.Insert(str, str)
+	}
+
+	for i := 0; i < count; i++ {
+		str := fmt.Sprintf("%d", i)
+		old := r.Delete(str)
+
+		if string(old) != str {
+			t.Errorf("delete value not match old %s expect %s", string(old), str)
+		}
+	}
 
 	for _, d := range r.Root.Children {
 		t.Errorf("should be empty tree %+v", d)

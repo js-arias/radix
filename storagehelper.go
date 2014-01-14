@@ -79,8 +79,6 @@ func (self *helper) delNodeFromStorage(seq int64) error {
 		return err
 	}
 
-	self.AddInMemoryNodeCount(-1)
-
 	return nil
 }
 
@@ -94,6 +92,7 @@ func (self *helper) delFromStoragebyKey(key string) error {
 }
 
 func (self *helper) AddInMemoryNodeCount(n int) {
+	logging.Info("AddInMemoryNodeCount", n)
 	atomic.AddInt64(&self.inmemoryNodeCount, int64(n))
 }
 
@@ -262,7 +261,7 @@ func (self *helper) DumpMemNode(node *radNode, level int) error {
 		}
 
 		fmt.Printf("%s %s, value: %s, seq:%v, father:%v\n", emptyPrefix, n.Prefix, n.Value, n.Seq, n.father.Seq)
-		self.DumpNode(n, level+1)
+		self.DumpMemNode(n, level+1)
 	}
 
 	return nil

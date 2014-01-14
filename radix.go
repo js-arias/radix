@@ -71,6 +71,7 @@ func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 		if err != nil {
 			logging.Fatal(err)
 		}
+		self.h.AddInMemoryNodeCount(-1)
 
 		//cleanup n
 		n = n.father
@@ -84,7 +85,7 @@ func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 
 	self.h.getChildrenByNode(leaf) //we need to copy child if leaf is on disk
 
-	err := self.h.delNodeFromStorage(leaf.Seq)
+	err := self.h.delNodeFromStorage(leaf.Seq) //no need to dec inmemory node count, because we reuse it
 	if err != nil {
 		logging.Fatal(err)
 	}
@@ -97,6 +98,7 @@ func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 	adjustFather(latest)
 
 	logging.Infof("persistent %+v, %+v", latest.father, latest)
+
 	self.h.persistentNode(latest, nil)
 	self.h.persistentNode(latest.father, nil)
 }
@@ -139,6 +141,7 @@ func (self *Radix) deleteNode(n *radNode) {
 	i := self.getIndex(n)
 
 	self.h.delNodeFromStorage(n.Seq)
+	self.h.AddInMemoryNodeCount(-1)
 
 	//n is leaf node
 	if len(n.father.Children) > 1 {
@@ -482,8 +485,9 @@ func randomCut(n *radNode, tree *Radix) (retry bool) {
 		sum += childrenCnt
 	}
 
+	//check status
 	if int64(sum) != tree.h.GetInMemoryNodeCount() {
-		// tree.h.DumpNode(tree.Root, 0)
+		tree.h.DumpMemNode(tree.Root, 0)
 		logging.Errorf("sum: %d, max: %d, InMemoryNodeCount %d", sum, tree.MaxInMemoryNodeCount, tree.h.GetInMemoryNodeCount())
 		panic("")
 	}

@@ -150,7 +150,9 @@ func (self *Radix) addNodesCallBack() {
 
 	self.stats.lastCut = time.Now()
 	self.lastInsertNodeCnt = self.stats.insertSuccess
-	// logging.Debugf("after cut%+v", self.Root)
+
+	// logging.Debug("after cut")
+	// self.h.DumpMemNode(self.Root, 0)
 	// logging.Info("left count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
 }
 
@@ -215,7 +217,7 @@ func (self *Radix) Delete(key string) []byte {
 
 	self.lock.Lock()
 	defer func() {
-		// self.addNodesCallBack()
+		self.addNodesCallBack()
 		self.lock.Unlock()
 	}()
 
