@@ -92,7 +92,7 @@ func Open(path string) *Radix {
 		}
 	}
 
-	tree.MaxInMemoryNodeCount = 500000
+	tree.MaxInMemoryNodeCount = 5000000
 
 	tree.tick = time.NewTicker(5 * time.Second)
 
@@ -108,7 +108,7 @@ func (self *Radix) calcSpeed() {
 	insertCnt := self.stats.insertSuccess - self.lastInsertNodeCnt
 	sec := time.Since(self.stats.lastCheck).Seconds()
 	if sec > 0 {
-		logging.Debugf("%+v, speed %d", self.stats, int64(float64(insertCnt)/sec))
+		logging.Debugf("%+v, speed %d, InMemoryNodeCount: %v", self.stats, int64(float64(insertCnt)/sec), self.h.GetInMemoryNodeCount())
 	}
 
 	self.stats.lastCheck = time.Now()
