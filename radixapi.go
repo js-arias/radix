@@ -237,6 +237,8 @@ func (self *Radix) Delete(key string) []byte {
 func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 	self.tryTouch(key)
 
+	internalKey := encodeValueToInternalKey(key)
+
 	self.lock.Lock()
 	defer func() {
 		self.addNodesCallBack()
@@ -251,7 +253,7 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 	}()
 
 	self.beginWriteBatch()
-	oldvalue, err := self.Root.put(key, []byte(Value), key, invalid_version, false, self)
+	oldvalue, err := self.Root.put(key, []byte(Value), internalKey, invalid_version, false, self)
 	if err != nil {
 		self.stats.insertFailed++
 		logging.Info(err)
@@ -274,6 +276,8 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) {
 	self.tryTouch(key)
 
+	internalKey := encodeValueToInternalKey(key)
+
 	self.lock.Lock()
 	defer func() {
 		self.addNodesCallBack()
@@ -281,7 +285,7 @@ func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) 
 	}()
 
 	self.beginWriteBatch()
-	oldvalue, err := self.Root.put(key, []byte(Value), key, version, false, self)
+	oldvalue, err := self.Root.put(key, []byte(Value), internalKey, version, false, self)
 	if err != nil {
 		logging.Info(err)
 		self.commitWriteBatch()
@@ -299,6 +303,7 @@ func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) 
 
 //using RLock to load tree into memory
 func (self *Radix) tryTouch(key string) {
+	return
 	if self.h.GetInMemoryNodeCount() < self.MaxInMemoryNodeCount/2 {
 		return
 	}

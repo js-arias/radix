@@ -194,8 +194,8 @@ func (r *radNode) delete(key string, tree *Radix) []byte {
 }
 
 // implements insert or replace, return nil, nil if this a new value
-func (r *radNode) put(key string, Value []byte, orgKey string, version int64, force bool, tree *Radix) ([]byte, error) {
-	logging.Info("insert", orgKey, "--", string(Value), r.Prefix)
+func (r *radNode) put(key string, Value []byte, internalKey string, version int64, force bool, tree *Radix) ([]byte, error) {
+	logging.Info("insert", internalKey, "--", string(Value), r.Prefix)
 
 	tree.h.getChildrenByNode(r)
 
@@ -210,26 +210,26 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 		if len(comm) == len(key) {
 			if len(comm) == len(d.Prefix) {
 				if len(d.Value) == 0 {
-					d.Value = encodeValueToInternalKey(orgKey)
+					d.Value = internalKey
 					tree.h.persistentNode(d, Value)
 					// tree.h.persistentNode(d.father, nil)
 					return nil, nil
 				}
 
 				if force || version == d.Version {
-					d.Value = encodeValueToInternalKey(orgKey)
+					d.Value = internalKey
 					orgValue, err := tree.h.GetValueFromStore(d.Value)
 					if err != nil {
 						logging.Fatal(err)
 					}
 					d.Version++
 					tree.h.persistentNode(d, Value)
-					tree.h.persistentNode(d.father, nil)
+					// tree.h.persistentNode(d.father, nil)
 					return orgValue, nil
 				}
 
 				// logging.Infof("version not match, version is %d, but you provide %d", d.Version, version)
-				return nil, fmt.Errorf("key: %s, version not match, version is %d, but you provide %d", orgKey, d.Version, version)
+				return nil, fmt.Errorf("key: %s, version not match, version is %d, but you provide %d", internalKey, d.Version, version)
 			}
 
 			//ex: ab, insert a
@@ -249,7 +249,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 			d.Children = make([]*radNode, 1, 1)
 			d.Children[0] = n
 			d.Prefix = comm
-			d.Value = encodeValueToInternalKey(orgKey)
+			d.Value = internalKey
 			tree.h.persistentNode(d, Value)
 			// tree.h.persistentNode(d.father, nil)
 			return nil, nil
@@ -257,7 +257,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 
 		//ex: a, insert ab
 		if len(comm) == len(d.Prefix) {
-			return d.put(key[len(comm):], Value, orgKey, version, force, tree)
+			return d.put(key[len(comm):], Value, internalKey, version, force, tree)
 		}
 
 		//ex: ab, insert ac, extra common a
@@ -275,7 +275,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 		tree.h.persistentNode(p, nil)
 		n := &radNode{
 			Prefix: key[len(comm):],
-			Value:  encodeValueToInternalKey(orgKey),
+			Value:  internalKey,
 			father: d,
 			Seq:    tree.h.allocSeq(),
 		}
@@ -296,7 +296,7 @@ func (r *radNode) put(key string, Value []byte, orgKey string, version int64, fo
 
 	n := &radNode{
 		Prefix: key,
-		Value:  encodeValueToInternalKey(orgKey),
+		Value:  internalKey,
 		father: r,
 		Seq:    tree.h.allocSeq(),
 	}
