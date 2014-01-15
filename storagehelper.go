@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"github.com/ngaut/logging"
 	//enc "labix.org/v2/mgo/bson"
-	enc "encoding/json"
+	"bytes"
+	// enc "encoding/json"
 	"math/rand"
 	"strconv"
 	"sync/atomic"
@@ -15,14 +16,6 @@ type helper struct {
 	store             Storage
 	inmemoryNodeCount int64
 	startSeq          int64
-}
-
-type radDiskNode struct {
-	Prefix   string  `json:"p,omitempty"` // current prefix of the node
-	Children []int64 `json:"c,omitempty"`
-	Value    string  `json:"val,omitempty"` // stored key
-	Version  int64   `json:"ver, omitempty"`
-	Seq      int64   `json:"seq"`
 }
 
 func (self *helper) allocSeq() int64 {
@@ -50,7 +43,12 @@ func (self *helper) persistentNode(n *radNode, value []byte) error {
 	x := self.makeRadDiskNode(n)
 
 	seq := strconv.FormatInt(x.Seq, 10)
-	buf, err := enc.Marshal(x)
+	// buf, err := enc.Marshal(x)
+	b := &bytes.Buffer{}
+	en := NewradDiskNodeJSONEncoder(b)
+	err := en.Encode(x)
+	buf := b.Bytes()
+
 	if err != nil {
 		logging.Fatal(err)
 		return err
@@ -121,14 +119,24 @@ func (self *helper) readRadDiskNode(seq int64) (*radDiskNode, error) {
 		return nil, fmt.Errorf("get key %d failed", seq)
 	}
 
-	var x radDiskNode
-	err = enc.Unmarshal(buf, &x)
-	if err != nil {
+	// var x radDiskNode
+	// err = enc.Unmarshal(buf, &x)
+	// if err != nil {
+	// 	logging.Fatal(err)
+	// 	return nil, err
+	// }
+
+	// return &x, nil
+
+	var x *radDiskNode
+	b := bytes.NewBuffer(buf)
+	de := NewradDiskNodeJSONDecoder(b)
+	if err := de.Decode(&x); err != nil {
 		logging.Fatal(err)
 		return nil, err
 	}
 
-	return &x, nil
+	return x, nil
 }
 
 func (self *helper) getNodeFromDisk(n *radNode) error {

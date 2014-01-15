@@ -141,7 +141,7 @@ func (self *Radix) addNodesCallBack() {
 	}
 
 	self.stats.cuts++
-	// logging.Debug("need cutEdge", "current count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
+	logging.Debug("need cutEdge", "current count", self.h.GetInMemoryNodeCount(), "MaxInMemoryNodeCount", self.MaxInMemoryNodeCount)
 	// logging.Debug("tree mem dump")
 	// self.h.DumpMemNode(self.Root, 0)
 	start := time.Now()
