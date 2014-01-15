@@ -39,7 +39,7 @@ type Stats struct {
 	getFailed     int64
 	cuts          int64
 	lists         int64
-	lastCut       time.Time
+	lastCheck     time.Time
 }
 
 func init() {
@@ -101,6 +101,20 @@ func Open(path string) *Radix {
 	return tree
 }
 
+func (self *Radix) calcSpeed() {
+	if self.lastInsertNodeCnt == 0 {
+		self.lastInsertNodeCnt = self.stats.insertSuccess
+	}
+	insertCnt := self.stats.insertSuccess - self.lastInsertNodeCnt
+	sec := time.Since(self.stats.lastCheck).Seconds()
+	if sec > 0 {
+		logging.Debugf("%+v, speed %d", self.stats, int64(float64(insertCnt)/sec))
+	}
+
+	self.stats.lastCheck = time.Now()
+	self.lastInsertNodeCnt = self.stats.insertSuccess
+}
+
 func (self *Radix) superVistor() {
 	for {
 		select {
@@ -110,9 +124,11 @@ func (self *Radix) superVistor() {
 			}
 
 			self.lock.Lock()
+			self.calcSpeed()
 			self.addNodesCallBack()
 			self.lock.Unlock()
-			logging.Debug("tick for checking nodes")
+
+			// logging.Debug("tick for checking nodes")
 		}
 	}
 }
@@ -138,18 +154,6 @@ func (self *Radix) addNodesCallBack() {
 	if self.h.GetInMemoryNodeCount() < 0 {
 		panic("never happend")
 	}
-
-	if self.lastInsertNodeCnt == 0 {
-		self.lastInsertNodeCnt = self.stats.insertSuccess
-	}
-	insertCnt := self.stats.insertSuccess - self.lastInsertNodeCnt
-	sec := time.Since(self.stats.lastCut).Seconds()
-	if sec > 0 {
-		logging.Debugf("%+v, speed %d", self.stats, int64(float64(insertCnt)/sec))
-	}
-
-	self.stats.lastCut = time.Now()
-	self.lastInsertNodeCnt = self.stats.insertSuccess
 
 	// logging.Debug("after cut")
 	// self.h.DumpMemNode(self.Root, 0)
