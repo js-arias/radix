@@ -217,13 +217,7 @@ func (self *Radix) DumpMemTree() error {
 
 // Delete removes the Value associated with a particular key and returns it.
 func (self *Radix) Delete(key string) []byte {
-	self.tryTouch(key)
-
 	self.lock.Lock()
-	defer func() {
-		self.addNodesCallBack()
-		self.lock.Unlock()
-	}()
 
 	logging.Info("delete", key)
 	self.beginWriteBatch()
@@ -231,23 +225,17 @@ func (self *Radix) Delete(key string) []byte {
 	err := self.commitWriteBatch()
 	if err != nil {
 		logging.Fatal(err)
+		self.lock.Unlock()
 		return nil
 	}
 
+	self.lock.Unlock()
 	return b
 }
 
 // Insert put a Value in the radix. It returns old value if exist
 func (self *Radix) Insert(key string, Value string) ([]byte, error) {
-	self.tryTouch(key)
-
 	internalKey := encodeValueToInternalKey(key)
-
-	self.lock.Lock()
-	defer func() {
-		self.addNodesCallBack()
-		self.lock.Unlock()
-	}()
 
 	start := time.Now()
 	defer func() {
@@ -256,12 +244,15 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 		}
 	}()
 
+	self.lock.Lock()
+
 	self.beginWriteBatch()
 	oldvalue, err := self.Root.put(key, []byte(Value), internalKey, invalid_version, false, self)
 	if err != nil {
 		self.stats.insertFailed++
 		logging.Info(err)
 		self.commitWriteBatch()
+		self.lock.Unlock()
 		return nil, err
 	}
 
@@ -269,22 +260,22 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 	if err != nil {
 		self.stats.insertFailed++
 		logging.Fatal(err)
+		self.lock.Unlock()
 		return nil, err
 	}
 
 	self.stats.insertSuccess++
 
+	self.lock.Unlock()
 	return oldvalue, nil
 }
 
 func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) {
-	self.tryTouch(key)
-
 	internalKey := encodeValueToInternalKey(key)
 
 	self.lock.Lock()
 	defer func() {
-		self.addNodesCallBack()
+		// self.addNodesCallBack()
 		self.lock.Unlock()
 	}()
 
@@ -303,19 +294,6 @@ func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) 
 	}
 
 	return oldvalue, nil
-}
-
-//using RLock to load tree into memory
-func (self *Radix) tryTouch(key string) {
-	return
-	if self.h.GetInMemoryNodeCount() < self.MaxInMemoryNodeCount/2 {
-		return
-	}
-
-	self.lock.RLock()
-	defer self.lock.RUnlock()
-
-	self.Root.lookup(key, self)
 }
 
 // Lookup searches for a particular string in the tree.
@@ -361,20 +339,21 @@ func (self *Radix) FindInternalKey(key string) string {
 // Lookup searches for a particular string in the tree.
 func (self *Radix) GetWithVersion(key string) ([]byte, int64) {
 	self.lock.RLock()
-	defer self.lock.RUnlock()
-
 	if x, _, ok := self.Root.lookup(key, self); ok && len(x.Value) > 0 {
 		buf, err := self.h.GetValueFromStore(x.Value)
 		if err != nil {
 			self.stats.getFailed++
+			self.lock.RUnlock()
 			return nil, -1
 		}
 
 		self.stats.getSuccess++
+		self.lock.RUnlock()
 		return buf, x.Version
 	}
 
 	self.stats.getFailed++
+	self.lock.RUnlock()
 	return nil, -1
 }
 
