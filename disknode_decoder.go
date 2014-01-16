@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/ngaut/megajson/scanner"
-	"io"
 	"strconv"
 )
 
@@ -12,8 +11,8 @@ type radDiskNodeJSONDecoder struct {
 	s scanner.Scanner
 }
 
-func NewradDiskNodeJSONDecoder(r io.Reader) *radDiskNodeJSONDecoder {
-	return &radDiskNodeJSONDecoder{s: scanner.NewScanner(r)}
+func NewradDiskNodeJSONDecoder(buf []byte) *radDiskNodeJSONDecoder {
+	return &radDiskNodeJSONDecoder{s: scanner.NewScanner(buf)}
 }
 
 func NewradDiskNodeJSONScanDecoder(s scanner.Scanner) *radDiskNodeJSONDecoder {

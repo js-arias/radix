@@ -129,8 +129,7 @@ func (self *helper) readRadDiskNode(seq int64) (*radDiskNode, error) {
 	// return &x, nil
 
 	var x *radDiskNode
-	b := bytes.NewBuffer(buf)
-	de := NewradDiskNodeJSONDecoder(b)
+	de := NewradDiskNodeJSONDecoder(buf)
 	if err := de.Decode(&x); err != nil {
 		logging.Fatal(err)
 		return nil, err

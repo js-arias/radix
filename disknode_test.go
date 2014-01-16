@@ -17,9 +17,11 @@ func TestEncodeDecode(t *testing.T) {
 	en := NewradDiskNodeJSONEncoder(b)
 	en.Encode(&n)
 
-	println(b.String())
+	// println(b.String())
 
-	de := NewradDiskNodeJSONDecoder(b)
+	buf := b.Bytes()
+	println(len(buf), string(buf))
+	de := NewradDiskNodeJSONDecoder(buf)
 	var x *radDiskNode
 	if err := de.Decode(&x); err != nil {
 		t.Error(err)
