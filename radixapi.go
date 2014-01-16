@@ -92,7 +92,7 @@ func Open(path string) *Radix {
 		}
 	}
 
-	tree.MaxInMemoryNodeCount = 5000000
+	tree.MaxInMemoryNodeCount = 500000
 
 	tree.tick = time.NewTicker(5 * time.Second)
 

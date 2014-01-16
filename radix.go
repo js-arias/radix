@@ -200,8 +200,6 @@ func (r *radNode) put(key string, Value []byte, internalKey string, version int6
 	tree.h.getChildrenByNode(r)
 
 	for _, d := range r.Children {
-		tree.h.getChildrenByNode(d)
-
 		comm := common(key, d.Prefix)
 		if len(comm) == 0 {
 			continue
@@ -232,6 +230,8 @@ func (r *radNode) put(key string, Value []byte, internalKey string, version int6
 				return nil, fmt.Errorf("key: %s, version not match, version is %d, but you provide %d", internalKey, d.Version, version)
 			}
 
+			tree.h.getChildrenByNode(d)
+
 			//ex: ab, insert a
 			n := &radNode{
 				Prefix:   d.Prefix[len(comm):],
@@ -259,6 +259,8 @@ func (r *radNode) put(key string, Value []byte, internalKey string, version int6
 		if len(comm) == len(d.Prefix) {
 			return d.put(key[len(comm):], Value, internalKey, version, force, tree)
 		}
+
+		tree.h.getChildrenByNode(d)
 
 		//ex: ab, insert ac, extra common a
 		p := &radNode{
@@ -419,7 +421,7 @@ func (r *radNode) lookup(key string, tree *Radix) (*radNode, int, bool) {
 	logging.Infof("lookup %s, %+v", key, r)
 
 	for i, d := range r.Children {
-		tree.h.getChildrenByNode(d)
+		// tree.h.getChildrenByNode(d)
 
 		logging.Infof("lookup %s, %+v", key, d)
 
@@ -430,6 +432,7 @@ func (r *radNode) lookup(key string, tree *Radix) (*radNode, int, bool) {
 
 		// The key is found
 		if len(comm) == len(key) {
+			tree.h.getChildrenByNode(d)
 			logging.Infof("found %+v", d)
 			if len(comm) == len(d.Prefix) {
 				return d, i, true
