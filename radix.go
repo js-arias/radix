@@ -176,7 +176,7 @@ func (self *Radix) deleteNode(n *radNode) {
 
 // implements delete
 func (r *radNode) delete(key string, tree *Radix) []byte {
-	if x, _, ok := r.lookup(key, tree); ok {
+	if x, _, ok := r.lookup(key, tree); ok && len(x.Value) > 0 {
 		v, err := tree.h.GetValueFromStore(x.Value)
 		if err != nil {
 			logging.Fatal("never happend")
@@ -200,6 +200,11 @@ func (r *radNode) put(key string, Value []byte, internalKey string, version int6
 	tree.h.getChildrenByNode(r)
 
 	for _, d := range r.Children {
+		// tree.h.getChildrenByNode(d)
+		if len(d.Prefix) == 0 { //check
+			panic("never happend")
+		}
+
 		comm := common(key, d.Prefix)
 		if len(comm) == 0 {
 			continue
@@ -209,7 +214,8 @@ func (r *radNode) put(key string, Value []byte, internalKey string, version int6
 			if len(comm) == len(d.Prefix) {
 				if len(d.Value) == 0 {
 					d.Value = internalKey
-					tree.h.persistentNode(d, Value)
+					tree.h.getChildrenByNode(d)
+					tree.h.persistentNode(d, Value) //todo: children seq not changed
 					// tree.h.persistentNode(d.father, nil)
 					return nil, nil
 				}
@@ -221,13 +227,14 @@ func (r *radNode) put(key string, Value []byte, internalKey string, version int6
 						logging.Fatal(err)
 					}
 					d.Version++
-					tree.h.persistentNode(d, Value)
+					tree.h.getChildrenByNode(d)
+					tree.h.persistentNode(d, Value) //todo: children seq not changed
 					// tree.h.persistentNode(d.father, nil)
 					return orgValue, nil
 				}
 
-				// logging.Infof("version not match, version is %d, but you provide %d", d.Version, version)
-				return nil, fmt.Errorf("key: %s, version not match, version is %d, but you provide %d", internalKey, d.Version, version)
+				// logging.Infof("version not match, version is %d, but you provide %d, %+v", d.Version, version, d)
+				return nil, fmt.Errorf("key: %s, version not match, version is %d, but you provide %d, %+v", internalKey, d.Version, version, d)
 			}
 
 			tree.h.getChildrenByNode(d)
@@ -490,7 +497,7 @@ func randomCut(n *radNode, tree *Radix) (retry bool) {
 
 	//check status
 	if int64(sum) != tree.h.GetInMemoryNodeCount() {
-		tree.h.DumpMemNode(tree.Root, 0)
+		// tree.h.DumpMemNode(tree.Root, 0)
 		logging.Errorf("sum: %d, max: %d, InMemoryNodeCount %d", sum, tree.MaxInMemoryNodeCount, tree.h.GetInMemoryNodeCount())
 		panic("")
 	}

@@ -217,9 +217,8 @@ func (self *Radix) DumpMemTree() error {
 
 // Delete removes the Value associated with a particular key and returns it.
 func (self *Radix) Delete(key string) []byte {
-	self.lock.Lock()
-
 	logging.Info("delete", key)
+	self.lock.Lock()
 	self.beginWriteBatch()
 	b := self.Root.delete(key, self)
 	err := self.commitWriteBatch()
@@ -301,7 +300,7 @@ func (self *Radix) Lookup(key string) []byte {
 	self.lock.RLock()
 	defer self.lock.RUnlock()
 
-	if x, _, ok := self.Root.lookup(key, self); ok {
+	if x, _, ok := self.Root.lookup(key, self); ok && len(x.Value) > 0 {
 		// logging.Debugf("GetValueFromStore %+v", x)
 		buf, err := self.h.GetValueFromStore(x.Value)
 		if err != nil {

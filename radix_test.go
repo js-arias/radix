@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const COUNT = 500000
+const COUNT = 3000000
 
 //todo: concurence test
 //random md5 key test
@@ -23,16 +23,26 @@ func TestDeleteAll(t *testing.T) {
 	r.Insert("test", "test")
 	r.Insert("slow", "slow")
 	r.Insert("water", "water")
-	r.Insert("te", "test")
-	r.Insert("tester", "test")
+	r.Insert("te", "te")
+	r.Insert("tester", "tester")
 
-	r.Delete("te")
-	r.Delete("tester")
-	r.Delete("test")
+	if string(r.Delete("te")) != "te" {
+		t.Error("delete not match")
+	}
+	if string(r.Delete("tester")) != "tester" {
+		t.Error("delete not match")
+	}
+	if string(r.Delete("test")) != "test" {
+		t.Error("delete not match")
+	}
 
-	r.Delete("slow")
+	if string(r.Delete("slow")) != "slow" {
+		t.Error("delete not match")
+	}
 
-	r.Delete("water")
+	if string(r.Delete("water")) != "water" {
+		t.Error("delete not match")
+	}
 
 	for _, d := range r.Root.Children {
 		t.Fatal("should be empty tree %+v", d)
@@ -250,24 +260,111 @@ func TestDeleteLastNodeCombine(t *testing.T) {
 	r.Insert("11", "11")
 	r.Insert("111", "111")
 	r.Insert("12", "12")
-	r.Delete("1")
-	r.Delete("12")
+	if string(r.Delete("1")) != "1" {
+		log.Fatal("not match")
+	}
+	if string(r.Delete("12")) != "12" {
+		log.Fatal("not match")
+	}
 
 	r.Insert("2", "2")
 	r.Insert("21", "21")
 	r.Insert("22", "22")
 	r.Insert("211", "211")
+	r.Insert("212", "212")
 
-	r.Delete("2")
-	r.Delete("22")
+	if string(r.Delete("212")) != "212" {
+		log.Fatal("not match")
+	}
 
-	r.Delete("11")
+	if string(r.Delete("2")) != "2" {
+		log.Fatal("not match")
+	}
+	if string(r.Delete("22")) != "22" {
+		log.Fatal("not match")
+	}
 
-	r.Delete("21")
+	if r.Delete("22") != nil {
+		log.Fatal("not match")
+	}
 
-	r.Delete("111")
+	if string(r.Delete("11")) != "11" {
+		log.Fatal("not match")
+	}
 
-	r.Delete("211")
+	if string(r.Delete("21")) != "21" {
+		log.Fatal("not match")
+	}
+
+	if string(r.Delete("111")) != "111" {
+		log.Fatal("not match")
+	}
+
+	if string(r.Delete("211")) != "211" {
+		log.Fatal("not match")
+	}
+
+	for _, d := range r.Root.Children {
+		t.Errorf("should be empty tree %+v", d)
+	}
+
+	if !r.h.store.IsEmpty() {
+		t.Error("should be empty", r.Stats())
+	}
+}
+
+func TestDeleteLastNodeCombineOnDisk(t *testing.T) {
+	r := Open(".")
+
+	r.Insert("1", "1")
+	r.Insert("11", "11")
+	r.Insert("111", "111")
+	r.Insert("12", "12")
+	r.Close()
+
+	r = Open(".")
+	if string(r.Delete("1")) != "1" {
+		log.Fatal("not match")
+	}
+	if string(r.Delete("12")) != "12" {
+		log.Fatal("not match")
+	}
+
+	r.Insert("2", "2")
+	r.Insert("21", "21")
+	r.Insert("22", "22")
+	r.Insert("211", "211")
+	r.Insert("212", "212")
+	r.Close()
+	r = Open(".")
+	defer r.Destory()
+
+	if string(r.Delete("2")) != "2" {
+		log.Fatal("not match")
+	}
+	if string(r.Delete("22")) != "22" {
+		log.Fatal("not match")
+	}
+
+	if string(r.Delete("11")) != "11" {
+		log.Fatal("not match")
+	}
+
+	if string(r.Delete("21")) != "21" {
+		log.Fatal("not match")
+	}
+
+	if string(r.Delete("111")) != "111" {
+		log.Fatal("not match")
+	}
+
+	if string(r.Delete("211")) != "211" {
+		log.Fatal("not match")
+	}
+
+	if string(r.Delete("212")) != "212" {
+		log.Fatal("not match")
+	}
 
 	for _, d := range r.Root.Children {
 		t.Errorf("should be empty tree %+v", d)
@@ -1236,12 +1333,14 @@ func TestCutEdge(t *testing.T) {
 	}
 }
 
-func TestConcurrentReadWrite(t *testing.T) {
+func TestConcurrentReadDelete(t *testing.T) {
 	runtime.GOMAXPROCS(4)
 	r := Open(".")
 	defer r.Destory()
 
 	count := COUNT / 100
+
+	log.Println("total count", count)
 
 	for i := 0; i < count; i++ {
 		str := fmt.Sprintf("%d", i)
@@ -1251,8 +1350,9 @@ func TestConcurrentReadWrite(t *testing.T) {
 	goroutineCount := 5
 
 	wg := sync.WaitGroup{}
-	wg.Add(2 * goroutineCount)
+	wg.Add(goroutineCount)
 	f := func(start, end int) {
+		log.Println("start-end", start, end)
 		for i := start; i < end; i++ {
 			str := fmt.Sprintf("%d", i)
 			buf, version := r.GetWithVersion(str)
@@ -1266,19 +1366,6 @@ func TestConcurrentReadWrite(t *testing.T) {
 
 	for i := 0; i < goroutineCount; i++ {
 		go f(i*count/goroutineCount, (i+1)*count/goroutineCount)
-	}
-
-	w := func(start, end int) {
-		for i := start; i < end; i++ {
-			str := fmt.Sprintf("%d", i)
-			r.Insert(str, str)
-		}
-		wg.Done()
-		log.Println("insert done")
-	}
-
-	for i := 0; i < goroutineCount; i++ {
-		go w(i*count/goroutineCount, (i+1)*count/goroutineCount)
 	}
 
 	wg.Wait()
@@ -1312,7 +1399,7 @@ func TestConcurrentReadWrite(t *testing.T) {
 		t.Error("should be empty", r.Stats())
 	}
 
-	for i := 0; i < 2*count; i++ {
+	for i := 0; i < count; i++ {
 		str := fmt.Sprintf("%d", i)
 		old := r.Delete(str)
 		if old != nil {
@@ -1353,11 +1440,17 @@ func TestConcurrentRandomReadWrite(t *testing.T) {
 
 	w := func(start, end int) {
 		for i := start; i < end; i++ {
+			if i == start || i == end-1 {
+				log.Println("insert....", i)
+			}
 			if i%1000 == 0 {
 				print("w")
 			}
+
 			str := fmt.Sprintf("%d", i)
-			r.Insert(str, str)
+			if b, err := r.Insert(str, str); b != nil || err != nil {
+				log.Fatal(b, err)
+			}
 		}
 		wg.Done()
 		log.Println("insert done", start, end)
@@ -1383,6 +1476,7 @@ func TestConcurrentRandomReadWrite(t *testing.T) {
 
 			if string(old) != str {
 				t.Errorf("delete value not match old %s expect %s", string(old), str)
+				log.Fatalf("delete value not match old %s expect %s", string(old), str)
 			}
 		}
 		log.Println("delete done")
