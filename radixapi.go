@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -341,17 +342,18 @@ func (self *Radix) GetWithVersion(key string) ([]byte, int64) {
 	if x, _, ok := self.Root.lookup(key, self); ok && len(x.Value) > 0 {
 		buf, err := self.h.GetValueFromStore(x.Value)
 		if err != nil {
-			self.stats.getFailed++
+			atomic.AddInt64(&self.stats.getFailed, 1)
 			self.lock.RUnlock()
 			return nil, -1
 		}
 
-		self.stats.getSuccess++
+		atomic.AddInt64(&self.stats.getSuccess, 1)
+
 		self.lock.RUnlock()
 		return buf, x.Version
 	}
 
-	self.stats.getFailed++
+	atomic.AddInt64(&self.stats.getFailed, 1)
 	self.lock.RUnlock()
 	return nil, -1
 }
