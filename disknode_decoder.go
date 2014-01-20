@@ -129,7 +129,7 @@ func (e *int64JSONDecoder) DecodeArray(ptr *[]int64) error {
 		return errors.New("Expected '['")
 	}
 
-	slice := make([]int64, 0)
+	slice := make([]int64, 0, 20)
 
 	// Loop over items.
 	index := 0

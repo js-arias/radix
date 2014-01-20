@@ -86,7 +86,7 @@ func (self *helper) persistentNode(n *radNode, value []byte) error {
 
 	seq := strconv.FormatInt(x.Seq, 10)
 	// buf, err := enc.Marshal(x)
-	b := &bytes.Buffer{}
+	b := bytes.NewBuffer(make([]byte, 1024))
 	en := NewradDiskNodeJSONEncoder(b)
 	err := en.Encode(x)
 	buf := b.Bytes()

@@ -134,6 +134,8 @@ func common(s, t string) string {
 					continue
 				}
 
+			} else {
+				break
 			}
 		}
 

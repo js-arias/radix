@@ -487,20 +487,20 @@ func randomCut(n *radNode, tree *Radix) (retry bool) {
 		return true
 	}
 
-	sum := 0
-	for _, c := range n.Children {
-		childrenCnt := 0
-		getInMemChildrenCount(c, &childrenCnt)
-		logging.Debugf("prefix %s, children count %d", c.Prefix, childrenCnt)
-		sum += childrenCnt
-	}
+	// sum := 0
+	// for _, c := range n.Children {
+	// 	childrenCnt := 0
+	// 	getInMemChildrenCount(c, &childrenCnt)
+	// 	logging.Debugf("prefix %s, children count %d", c.Prefix, childrenCnt)
+	// 	sum += childrenCnt
+	// }
 
-	//check status
-	if int64(sum) != tree.h.GetInMemoryNodeCount() {
-		// tree.h.DumpMemNode(tree.Root, 0)
-		logging.Errorf("sum: %d, max: %d, InMemoryNodeCount %d", sum, tree.MaxInMemoryNodeCount, tree.h.GetInMemoryNodeCount())
-		panic("")
-	}
+	// //check status
+	// if int64(sum) != tree.h.GetInMemoryNodeCount() {
+	// 	// tree.h.DumpMemNode(tree.Root, 0)
+	// 	logging.Errorf("sum: %d, max: %d, InMemoryNodeCount %d", sum, tree.MaxInMemoryNodeCount, tree.h.GetInMemoryNodeCount())
+	// 	panic("")
+	// }
 
 	//get children count
 	childrenCnt := 0

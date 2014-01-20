@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const COUNT = 5000000
+const COUNT = 50000
 
 //todo: concurence test
 //random md5 key test
@@ -109,6 +109,36 @@ func TestCommon(t *testing.T) {
 		t.Fail()
 	}
 
+}
+
+func TestBoundary(t *testing.T) {
+
+	str1 := []byte{0xF9, 0x89, 0x93, 0xA2}
+	str2 := []byte{0xF9, 0x89, 0x93, 0xA2}
+
+	str3 := []byte{0xF1, 0x89, 0x93, 0xA2}
+	str4 := []byte{0xF1, 0x89, 0x93, 0xA2}
+
+	comStr := common("fndsbngjbask"+string(str1), "fndsbngjbask"+string(str2))
+	if comStr != "fndsbngjbask" {
+		t.Error(comStr)
+		t.Fail()
+	}
+	comStr1 := common(string(str3), string(str4))
+	com1 := []byte{0xF1, 0x89, 0x93, 0xA2}
+	rs := rune(com1[0]&mask4)<<18 | rune(com1[1]&maskx)<<12 | rune(com1[2]&maskx)<<6 | rune(com1[3]&maskx)
+	if rs <= rune3Max || MaxRune < rs {
+		t.Error(rs <= rune3Max)
+		t.Error(MaxRune < rs)
+		t.Error(MaxRune)
+		t.Error(rs)
+	}
+	if comStr1 != string(rs) {
+		//t.Error(string(rs))
+		t.Error(comStr1)
+		t.Error(string(rs))
+		t.Fail()
+	}
 }
 
 func TestDeleteAll(t *testing.T) {
