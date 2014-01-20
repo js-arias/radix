@@ -12,10 +12,52 @@ import (
 	"time"
 )
 
+const (
+	maxworker = 20
+)
+
 type helper struct {
 	store             Storage
 	inmemoryNodeCount int64
 	startSeq          int64
+	reqch             chan *request
+}
+
+type readResult struct {
+	n   *radNode
+	err error
+}
+
+type request struct {
+	seq      int64
+	resultCh chan *readResult
+}
+
+func NewHelper(s Storage, startSeq int64) *helper {
+	h := &helper{store: s, startSeq: startSeq, reqch: make(chan *request, 1024)}
+	for i := 0; i < maxworker; i++ {
+		go h.work()
+	}
+
+	return h
+}
+
+func (self *helper) work() {
+	for req := range self.reqch {
+		n, err := self.readRadDiskNode(req.seq)
+		if err != nil {
+			panic("should never happend")
+			req.resultCh <- &readResult{nil, err}
+			continue
+		}
+
+		x := self.makeRadNode(n)
+		if x.Seq != req.seq { //check
+			logging.Errorf("seq not match, expect %d got %d, %+v", req.seq, x.Seq, x)
+			panic("never happend")
+		}
+		req.resultCh <- &readResult{x, err}
+	}
 }
 
 func (self *helper) allocSeq() int64 {
@@ -106,6 +148,10 @@ func (self *helper) GetValueFromStore(key string) ([]byte, error) {
 	return self.store.GetKey(key)
 }
 
+func (self *helper) readWorker() {
+
+}
+
 func (self *helper) readRadDiskNode(seq int64) (*radDiskNode, error) {
 	buf, err := self.store.ReadNode(strconv.FormatInt(seq, 10))
 	if err != nil {
@@ -158,21 +204,44 @@ func (self *helper) getNodeFromDisk(n *radNode) error {
 	if len(tmp.Children) > 0 {
 		n.Children = make([]*radNode, len(tmp.Children), len(tmp.Children))
 		self.AddInMemoryNodeCount(len(n.Children))
+	} else {
+		return nil
 	}
 
-	for i, seq := range tmp.Children {
-		x, err := self.readRadDiskNode(seq)
-		if err != nil { //check
-			panic(err.Error())
+	if len(tmp.Children) == 1 { //concurrent can't help, less garbage
+		for i, seq := range tmp.Children {
+			x, err := self.readRadDiskNode(seq)
+			if err != nil { //check
+				panic(err.Error())
+			}
+			if x.Seq != seq { //check
+				logging.Errorf("seq not match, expect %d got %d, %+v", seq, x.Seq, x)
+				panic("never happend")
+			}
+
+			node := self.makeRadNode(x)
+			node.father = n
+			n.Children[i] = node
 		}
-		if x.Seq != seq { //check
-			logging.Errorf("seq not match, expect %d got %d, %+v", seq, x.Seq, x)
-			panic("never happend")
+		return nil
+	}
+
+	resultCh := make(chan *readResult, len(tmp.Children))
+
+	//send request
+	for _, seq := range tmp.Children {
+		self.reqch <- &request{seq: seq, resultCh: resultCh}
+	}
+
+	//read result
+	for i, _ := range tmp.Children {
+		res := <-resultCh
+		if res.err != nil {
+			panic("should never happend")
 		}
 
-		node := self.makeRadNode(x)
-		node.father = n
-		n.Children[i] = node
+		res.n.father = n
+		n.Children[i] = res.n
 	}
 
 	logging.Infof("load from disk %+v", n)

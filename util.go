@@ -37,40 +37,48 @@ const (
 // return the common string, require utf8 string
 func common(s, t string) string {
 	var str []rune
-	var sb, tb [4]byte
+	var size int
+	if len(s) >= len(t) {
+		size = len(t)
+	} else {
+		size = len(s)
+	}
+	comSize := 0
+	str = make([]rune, size)
+	//var sb, tb [4]byte
 	var rs, rt rune
 	ind := 0
 	if s != "" && t != "" {
 		for len(s)-ind > 0 && len(t)-ind > 0 {
-			sb[0] = s[ind]
-			tb[0] = t[ind]
-			if sb[0] < tx && tb[0] < tx && sb[0] == tb[0] {
-				str = append(str, rune(sb[0]))
+
+			if s[ind] < tx && t[ind] < tx && s[ind] == t[ind] {
+				str[comSize] = rune(s[ind])
+				comSize++
 				ind++
 				continue
 			}
 			// unexpected continuation byte?
-			if sb[0] < t2 || tb[0] < t2 {
+			if s[ind] < t2 || t[ind] < t2 {
 				break
 			}
 			if len(s)-ind < 2 || len(t)-ind < 2 {
 				break
 			}
-			sb[1] = s[ind+1]
-			tb[1] = t[ind+1]
-			if sb[1] < tx || t2 <= sb[1] || tb[1] < tx || tb[1] < tx || t2 <= tb[1] {
+
+			if s[ind+1] < tx || t2 <= s[ind+1] || t[ind+1] < tx || t2 <= t[ind+1] {
 				break
 			}
 
 			// 2-byte, 11-bit sequence?
-			if sb[0] < t3 && tb[0] < t3 {
-				rs = rune(sb[0]&mask2)<<6 | rune(sb[1]&maskx)
-				rt = rune(tb[0]&mask2)<<6 | rune(tb[1]&maskx)
+			if s[ind] < t3 && t[ind] < t3 {
+				rs = rune(s[ind]&mask2)<<6 | rune(s[ind+1]&maskx)
+				rt = rune(t[ind]&mask2)<<6 | rune(t[ind+1]&maskx)
 				if rt <= rune1Max || rs <= rune1Max {
 					break
 				}
 				if rs == rt {
-					str = append(str, rs)
+					str[comSize] = rune(rs)
+					comSize++
 					ind += 2
 					continue
 				}
@@ -80,16 +88,15 @@ func common(s, t string) string {
 			if len(s)-ind < 3 || len(t)-ind < 3 {
 				break
 			}
-			sb[2] = s[ind+2]
-			tb[2] = t[ind+2]
-			if sb[2] < tx || t2 <= sb[2] || tb[2] < tx || t2 <= tb[2] {
+
+			if s[ind+2] < tx || t2 <= s[ind+2] || t[ind+2] < tx || t2 <= t[ind+2] {
 				break
 			}
 
 			// 3-byte, 16-bit sequence?
-			if sb[0] < t4 && tb[0] < t4 {
-				rs = rune(sb[0]&mask3)<<12 | rune(sb[1]&maskx)<<6 | rune(sb[2]&maskx)
-				rt = rune(tb[0]&mask3)<<12 | rune(tb[1]&maskx)<<6 | rune(tb[2]&maskx)
+			if s[ind] < t4 && t[ind] < t4 {
+				rs = rune(s[ind]&mask3)<<12 | rune(s[ind+1]&maskx)<<6 | rune(s[ind+2]&maskx)
+				rt = rune(t[ind]&mask3)<<12 | rune(t[ind+1]&maskx)<<6 | rune(t[ind+2]&maskx)
 				if rs <= rune2Max || rs <= rune2Max {
 					break
 				}
@@ -97,7 +104,8 @@ func common(s, t string) string {
 					break
 				}
 				if rs == rt {
-					str = append(str, rs)
+					str[comSize] = rune(rs)
+					comSize++
 					ind += 3
 					continue
 				}
@@ -107,20 +115,21 @@ func common(s, t string) string {
 			if len(s)-ind < 4 || len(t)-ind < 4 {
 				break
 			}
-			sb[3] = s[ind+3]
-			tb[3] = t[ind+3]
-			if sb[3] < tx || t2 <= sb[3] || tb[3] < tx || t2 <= tb[3] {
+
+			if s[ind+3] < tx || t2 <= s[ind+3] || t[ind+3] < tx || t2 <= t[ind+3] {
 				break
 			}
 
 			// 4-byte, 21-bit sequence?
-			if sb[0] < t5 && tb[0] < t5 {
-				rs = rune(sb[0]&mask4)<<18 | rune(sb[1]&maskx)<<12 | rune(sb[2]&maskx)<<6 | rune(sb[3]&maskx)
-				rt = rune(tb[0]&mask4)<<18 | rune(tb[1]&maskx)<<12 | rune(tb[2]&maskx)<<6 | rune(tb[3]&maskx)
+			if s[ind] < t5 && t[ind] < t5 {
+				rs = rune(s[ind]&mask4)<<18 | rune(s[ind+1]&maskx)<<12 | rune(s[ind+2]&maskx)<<6 | rune(s[ind+3]&maskx)
+				rt = rune(t[ind]&mask4)<<18 | rune(t[ind+1]&maskx)<<12 | rune(t[ind+2]&maskx)<<6 | rune(t[ind+3]&maskx)
 				if rs <= rune3Max || MaxRune < rs || rt <= rune3Max || MaxRune < rt {
 					break
 				}
 				if rs == rt {
+					str[comSize] = rune(rs)
+					comSize++
 					ind += 4
 					continue
 				}
@@ -129,7 +138,7 @@ func common(s, t string) string {
 		}
 
 	}
-	return string(str)
+	return string(str[:comSize])
 }
 
 func encodeValueToInternalKey(value string) string {

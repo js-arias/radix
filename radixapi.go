@@ -63,7 +63,7 @@ func Open(path string) *Radix {
 		Root: &radNode{
 			Seq: ROOT_SEQ, Stat: statOnDisk},
 		path: filepath.Join(path, "/db"),
-		h:    &helper{store: &Levelstorage{}, startSeq: ROOT_SEQ},
+		h:    NewHelper(&Levelstorage{}, ROOT_SEQ),
 	}
 
 	tree.lock.Lock()
@@ -95,7 +95,7 @@ func Open(path string) *Radix {
 
 	tree.MaxInMemoryNodeCount = 500000
 
-	tree.tick = time.NewTicker(5 * time.Second)
+	tree.tick = time.NewTicker(10 * time.Second)
 
 	go tree.superVistor()
 
