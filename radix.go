@@ -375,7 +375,7 @@ func (r *radNode) match(delimiter string, limitCount int32, limitLevel int, curr
 	logging.Info("checking", r.Prefix, "delimiter", delimiter, "value", r.Value)
 	if offset := strings.Index(r.Prefix, delimiter); len(delimiter) > 0 && offset >= 0 {
 		logging.Info("delimiter", delimiter, "found")
-		save(l, limitCount, currentCount, r, offset, true)
+		save(l, limitCount, currentCount, r, offset+1, true)
 		return false
 	}
 
