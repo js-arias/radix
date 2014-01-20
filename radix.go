@@ -336,7 +336,7 @@ type Tuple struct {
 	Type  int
 }
 
-func getWholePrefix(n *radNode) string {
+func getWholePrefix(n *radNode, offset int) string {
 	var prefix string
 	x := n
 	for n != nil && n.father != nil {
@@ -344,11 +344,11 @@ func getWholePrefix(n *radNode) string {
 		n = n.father
 	}
 
-	return prefix + x.Prefix
+	return prefix + x.Prefix[:offset]
 }
 
 //return: false if full
-func save(l *list.List, limitCount int32, currentCount *int32, n *radNode, inc bool) bool {
+func save(l *list.List, limitCount int32, currentCount *int32, n *radNode, offset int, inc bool) bool {
 	if inc {
 		if *currentCount >= limitCount {
 			// logging.Debug("full")
@@ -362,7 +362,7 @@ func save(l *list.List, limitCount int32, currentCount *int32, n *radNode, inc b
 			tp = RESULT_COMMON_PREFIX
 		}
 		// logging.Debug("save", getWholePrefix(n), n.Value)
-		l.PushBack(&Tuple{Key: getWholePrefix(n), Value: n.Value, Type: tp})
+		l.PushBack(&Tuple{Key: getWholePrefix(n, offset), Value: n.Value, Type: tp})
 		if inc {
 			*currentCount += 1
 		}
@@ -373,14 +373,14 @@ func save(l *list.List, limitCount int32, currentCount *int32, n *radNode, inc b
 
 func (r *radNode) match(delimiter string, limitCount int32, limitLevel int, currentCount *int32, tree *Radix, l *list.List) (goon bool) {
 	logging.Info("checking", r.Prefix, "delimiter", delimiter, "value", r.Value)
-	if pos := strings.Index(r.Prefix, delimiter); len(delimiter) > 0 && pos >= 0 {
+	if offset := strings.Index(r.Prefix, delimiter); len(delimiter) > 0 && offset >= 0 {
 		logging.Info("delimiter", delimiter, "found")
-		save(l, limitCount, currentCount, r, true)
+		save(l, limitCount, currentCount, r, offset, true)
 		return false
 	}
 
 	if len(r.Value) > 0 { //leaf node
-		ok := save(l, limitCount, currentCount, r, true)
+		ok := save(l, limitCount, currentCount, r, len(r.Prefix), true)
 		if len(r.Children) == 0 || !ok {
 			return false
 		}

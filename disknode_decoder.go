@@ -129,7 +129,7 @@ func (e *int64JSONDecoder) DecodeArray(ptr *[]int64) error {
 		return errors.New("Expected '['")
 	}
 
-	slice := make([]int64, 0, 20)
+	slice := make([]int64, 0, 20) //make([]int64, 0)
 
 	// Loop over items.
 	index := 0
@@ -152,7 +152,7 @@ func (e *int64JSONDecoder) DecodeArray(ptr *[]int64) error {
 
 		// println(string(tokval))
 
-		item, err := strconv.Atoi(string(tokval))
+		item, err := strconv.Atoi(string(tokval)) //todo: using custormize []byte to int function
 		if err != nil {
 			return err
 		}
