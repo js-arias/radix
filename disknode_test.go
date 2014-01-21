@@ -1,7 +1,6 @@
 package radix
 
 import (
-	"bytes"
 	"testing"
 )
 
@@ -13,17 +12,10 @@ func TestEncodeDecode(t *testing.T) {
 	n.Children[0] = n1.Seq
 	n.Children[1] = n2.Seq
 
-	b := &bytes.Buffer{}
-	en := NewradDiskNodeJSONEncoder(b)
-	en.Encode(&n)
-
 	buf, err := Marshal(&n)
 	if err != nil {
 		t.Error(err)
 	}
-
-	// println(b.String())
-	println(len(buf), string(buf))
 
 	var x radDiskNode
 
