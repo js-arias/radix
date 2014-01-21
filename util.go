@@ -36,14 +36,11 @@ const (
 
 // return the common string, require utf8 string
 func common(s []byte, t []byte) []byte {
-	comSize := 0
 	var rs, rt rune
 	ind := 0
 	if len(s) > 0 && len(t) > 0 {
 		for len(s)-ind > 0 && len(t)-ind > 0 {
-
 			if s[ind] < tx && t[ind] < tx && s[ind] == t[ind] {
-				comSize++
 				ind++
 				continue
 			}
@@ -67,7 +64,6 @@ func common(s []byte, t []byte) []byte {
 					break
 				}
 				if rs == rt {
-					comSize++
 					ind += 2
 					continue
 				}
@@ -93,7 +89,6 @@ func common(s []byte, t []byte) []byte {
 					break
 				}
 				if rs == rt {
-					comSize++
 					ind += 3
 					continue
 				}
@@ -116,7 +111,6 @@ func common(s []byte, t []byte) []byte {
 					break
 				}
 				if rs == rt {
-					comSize++
 					ind += 4
 					continue
 				}
