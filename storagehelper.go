@@ -72,12 +72,14 @@ func (self *helper) allocSeq() int64 {
 }
 
 func (self *helper) makeRadDiskNode(n *radNode) *radDiskNode {
-	return &radDiskNode{Prefix: n.Prefix, Children: n.cloneChildrenSeq(), Value: n.Value, Version: n.Version,
+	//todo: clean up []byte<->string conversion
+	return &radDiskNode{Prefix: string(n.Prefix), Children: n.cloneChildrenSeq(), Value: n.Value, Version: n.Version,
 		Seq: n.Seq}
 }
 
 func (self *helper) makeRadNode(x *radDiskNode) *radNode {
-	return &radNode{Prefix: x.Prefix, Children: nil, Value: x.Value, Version: x.Version,
+	//todo: clean up []byte<->string conversion
+	return &radNode{Prefix: []byte(x.Prefix), Children: nil, Value: x.Value, Version: x.Version,
 		Seq: x.Seq, Stat: statOnDisk}
 }
 

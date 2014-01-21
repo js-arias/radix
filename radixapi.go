@@ -219,9 +219,10 @@ func (self *Radix) DumpMemTree() error {
 // Delete removes the Value associated with a particular key and returns it.
 func (self *Radix) Delete(key string) []byte {
 	logging.Info("delete", key)
+	k := []byte(key)
 	self.lock.Lock()
 	self.beginWriteBatch()
-	b := self.Root.delete(key, self)
+	b := self.Root.delete(k, self)
 	err := self.commitWriteBatch()
 	if err != nil {
 		logging.Fatal(err)
@@ -244,10 +245,13 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 		}
 	}()
 
+	k := []byte(key)
+	v := []byte(Value)
+
 	self.lock.Lock()
 
 	self.beginWriteBatch()
-	oldvalue, err := self.Root.put(key, []byte(Value), internalKey, invalid_version, false, self)
+	oldvalue, err := self.Root.put(k, v, internalKey, invalid_version, false, self)
 	if err != nil {
 		self.stats.insertFailed++
 		logging.Info(err)
@@ -273,6 +277,9 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) {
 	internalKey := encodeValueToInternalKey(key)
 
+	k := []byte(key)
+	v := []byte(Value)
+
 	self.lock.Lock()
 	defer func() {
 		// self.addNodesCallBack()
@@ -280,7 +287,7 @@ func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) 
 	}()
 
 	self.beginWriteBatch()
-	oldvalue, err := self.Root.put(key, []byte(Value), internalKey, version, false, self)
+	oldvalue, err := self.Root.put(k, v, internalKey, version, false, self)
 	if err != nil {
 		logging.Info(err)
 		self.commitWriteBatch()
@@ -301,7 +308,7 @@ func (self *Radix) Lookup(key string) []byte {
 	self.lock.RLock()
 	defer self.lock.RUnlock()
 
-	if x, _, ok := self.Root.lookup(key, self); ok && len(x.Value) > 0 {
+	if x, _, ok := self.Root.lookup([]byte(key), self); ok && len(x.Value) > 0 {
 		// logging.Debugf("GetValueFromStore %+v", x)
 		buf, err := self.h.GetValueFromStore(x.Value)
 		if err != nil {
@@ -314,10 +321,11 @@ func (self *Radix) Lookup(key string) []byte {
 }
 
 func (self *Radix) GetFirstLevelChildrenCount(key string) int {
+	k := []byte(key)
 	self.lock.RLock()
 	defer self.lock.RUnlock()
 
-	if x, _, _ := self.Root.lookup(key, self); x != nil {
+	if x, _, _ := self.Root.lookup(k, self); x != nil {
 		return len(x.Children)
 	}
 
@@ -326,10 +334,11 @@ func (self *Radix) GetFirstLevelChildrenCount(key string) int {
 }
 
 func (self *Radix) FindInternalKey(key string) string {
+	k := []byte(key)
 	self.lock.RLock()
 	defer self.lock.RUnlock()
 
-	if x, _, _ := self.Root.lookup(key, self); x != nil {
+	if x, _, _ := self.Root.lookup(k, self); x != nil {
 		return x.Value
 	}
 
@@ -338,8 +347,9 @@ func (self *Radix) FindInternalKey(key string) string {
 
 // Lookup searches for a particular string in the tree.
 func (self *Radix) GetWithVersion(key string) ([]byte, int64) {
+	k := []byte(key)
 	self.lock.RLock()
-	if x, _, ok := self.Root.lookup(key, self); ok && len(x.Value) > 0 {
+	if x, _, ok := self.Root.lookup(k, self); ok && len(x.Value) > 0 {
 		buf, err := self.h.GetValueFromStore(x.Value)
 		if err != nil {
 			atomic.AddInt64(&self.stats.getFailed, 1)
@@ -359,15 +369,18 @@ func (self *Radix) GetWithVersion(key string) ([]byte, int64) {
 }
 
 func (self *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, limitCount int32, limitLevel int, marker string) *list.List {
-	self.lock.RLock()
-	defer self.lock.RUnlock()
+	key := []byte(prefix)
 
 	logging.Info("limitCount", limitCount, "prefix", prefix, "marker", marker)
 
-	key := prefix
 	if len(marker) > 0 {
-		key = marker
+		key = []byte(marker)
 	}
+
+	delim := []byte(delimiter)
+
+	self.lock.RLock()
+	defer self.lock.RUnlock()
 
 	node, _, exist := self.Root.lookup(key, self)
 	if node == nil {
@@ -383,7 +396,7 @@ func (self *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, l
 	var currentCount int32
 
 	l := list.New()
-	node.listByPrefixDelimiterMarker(skipRoot, delimiter, limitCount, limitLevel, &currentCount, self, l)
+	node.listByPrefixDelimiterMarker(skipRoot, delim, limitCount, limitLevel, &currentCount, self, l)
 	for e := l.Front(); e != nil; e = e.Next() {
 		tuple := e.Value.(*Tuple)
 		key := tuple.Value
@@ -403,11 +416,13 @@ func (self *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, l
 
 // Prefix returns a list of elements that share a given prefix.
 func (self *Radix) Prefix(prefix string) *list.List {
+	pre := []byte(prefix)
+
 	self.lock.RLock()
 	defer self.lock.RUnlock()
 
 	l := list.New()
-	n, _, _ := self.Root.lookup(prefix, self)
+	n, _, _ := self.Root.lookup(pre, self)
 	if n == nil {
 		return l
 	}

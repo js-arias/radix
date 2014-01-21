@@ -35,24 +35,14 @@ const (
 )
 
 // return the common string, require utf8 string
-func common(s, t string) string {
-	var str []rune
-	var size int
-	if len(s) >= len(t) {
-		size = len(t)
-	} else {
-		size = len(s)
-	}
+func common(s []byte, t []byte) []byte {
 	comSize := 0
-	str = make([]rune, size)
-	//var sb, tb [4]byte
 	var rs, rt rune
 	ind := 0
-	if s != "" && t != "" {
+	if len(s) > 0 && len(t) > 0 {
 		for len(s)-ind > 0 && len(t)-ind > 0 {
 
 			if s[ind] < tx && t[ind] < tx && s[ind] == t[ind] {
-				str[comSize] = rune(s[ind])
 				comSize++
 				ind++
 				continue
@@ -77,7 +67,6 @@ func common(s, t string) string {
 					break
 				}
 				if rs == rt {
-					str[comSize] = rune(rs)
 					comSize++
 					ind += 2
 					continue
@@ -104,7 +93,6 @@ func common(s, t string) string {
 					break
 				}
 				if rs == rt {
-					str[comSize] = rune(rs)
 					comSize++
 					ind += 3
 					continue
@@ -128,7 +116,6 @@ func common(s, t string) string {
 					break
 				}
 				if rs == rt {
-					str[comSize] = rune(rs)
 					comSize++
 					ind += 4
 					continue
@@ -140,7 +127,12 @@ func common(s, t string) string {
 		}
 
 	}
-	return string(str[:comSize])
+
+	if ind == 0 {
+		return nil
+	}
+
+	return cloneByteSlice(s[:ind])
 }
 
 func encodeValueToInternalKey(value string) string {
@@ -149,4 +141,10 @@ func encodeValueToInternalKey(value string) string {
 
 func decodeValueToKey(value string) string {
 	return value[1:]
+}
+
+func cloneByteSlice(b []byte) []byte {
+	s := make([]byte, len(b))
+	copy(s, b)
+	return s
 }

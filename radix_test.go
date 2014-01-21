@@ -11,100 +11,97 @@ import (
 	"time"
 )
 
-const COUNT = 50000
-
-//todo: concurence test
-//random md5 key test
+const COUNT = 5000000
 
 func TestCommon(t *testing.T) {
 
-	stri := "几个大盘那/个好"
-	stri2 := "几个大盘那/个好代码规范咖啡店老"
-	stri4 := "abcd"
-	stri5 := "abcd7"
-	str6 := "123/"
-	str7 := "123/456"
-	str8 := "abc哈124"
-	str9 := "aBc哈124而899"
-	str10 := "aBc哈124而89"
-	str11 := "aBc哈124*/&环境lk"
-	str12 := "aBc哈124*/&环境lk34lk"
-	str13 := "/#&*lk$@!plk0987738"
-	str14 := "/#&*lk$@!plk0987738344/098jk"
-	str15 := "fdja&&^%^002fdkajdk中就嗲司机93y388327"
-	str16 := "fdja&&^%^002fdkajdk中就嗲司机93bfdsau"
-	str17 := "$^89()dja&&^%^002fdkajdk中就嗲司机93好y388327"
-	str18 := "$^89()ja&&^%^002fdkajdk中就嗲司机93好fdsau"
-	str19 := "0299381000099988/HJDJDJJ&&&90()-=122:><发到你看范德萨接口接口大家看"
-	str20 := "0299381000099988/HJDJDJJ&&&90()-=122:><fdnfiahfihuiahif"
-	str21 := "搭建积分地撒谎ifh**&&&………………————+：；》《MKKKKKK*分阶段看 发动机类似就fdhdshfnhfkdjshkfh"
-	str22 := "搭建积分地撒谎ifh**&&&………………————+：；》《MKKKKKK*分阶段看 发动机类似就飞机哦司机你（98人"
-	str23 := "    ()(*&&^^^^%%$$##!!!~@#$^&*((?>><??搭建积分地撒谎ifh**&&&………………————+：；》《MKKKKKK*分阶段看 发动机类似就fdhdshfnhfkdjshkfh"
-	str24 := "    ()(*&&^^^^%%$$##!!!~@#$^&*((?>><??搭建积分地撒谎ifh**&&&………………————+：；》《MKKKKKK*分阶段看 发动机类似就飞机哦司机你（98人"
+	stri := []byte("几个大盘那/个好")
+	stri2 := []byte("几个大盘那/个好代码规范咖啡店老")
+	stri4 := []byte("abcd")
+	stri5 := []byte("abcd7")
+	str6 := []byte("123/")
+	str7 := []byte("123/456")
+	str8 := []byte("abc哈124")
+	str9 := []byte("aBc哈124而899")
+	str10 := []byte("aBc哈124而89")
+	str11 := []byte("aBc哈124*/&环境lk")
+	str12 := []byte("aBc哈124*/&环境lk34lk")
+	str13 := []byte("/#&*lk$@!plk0987738")
+	str14 := []byte("/#&*lk$@!plk0987738344/098jk")
+	str15 := []byte("fdja&&^%^002fdkajdk中就嗲司机93y388327")
+	str16 := []byte("fdja&&^%^002fdkajdk中就嗲司机93bfdsau")
+	str17 := []byte("$^89()dja&&^%^002fdkajdk中就嗲司机93好y388327")
+	str18 := []byte("$^89()ja&&^%^002fdkajdk中就嗲司机93好fdsau")
+	str19 := []byte("0299381000099988/HJDJDJJ&&&90()-=122:><发到你看范德萨接口接口大家看")
+	str20 := []byte("0299381000099988/HJDJDJJ&&&90()-=122:><fdnfiahfihuiahif")
+	str21 := []byte("搭建积分地撒谎ifh**&&&………………————+：；》《MKKKKKK*分阶段看 发动机类似就fdhdshfnhfkdjshkfh")
+	str22 := []byte("搭建积分地撒谎ifh**&&&………………————+：；》《MKKKKKK*分阶段看 发动机类似就飞机哦司机你（98人")
+	str23 := []byte("    ()(*&&^^^^%%$$##!!!~@#$^&*((?>><??搭建积分地撒谎ifh**&&&………………————+：；》《MKKKKKK*分阶段看 发动机类似就fdhdshfnhfkdjshkfh")
+	str24 := []byte("    ()(*&&^^^^%%$$##!!!~@#$^&*((?>><??搭建积分地撒谎ifh**&&&………………————+：；》《MKKKKKK*分阶段看 发动机类似就飞机哦司机你（98人")
 
 	comStr := common(stri, stri2)
-	if comStr != "几个大盘那/个好" {
+	if string(comStr) != "几个大盘那/个好" {
 		t.Error(comStr)
 		t.Fail()
 	}
 	comStr1 := common(stri4, stri5)
-	if comStr1 != "abcd" {
+	if string(comStr1) != "abcd" {
 		t.Error(comStr1)
 		t.Fail()
 	}
 	comStr2 := common(str6, str7)
-	if comStr2 != "123/" {
+	if string(comStr2) != "123/" {
 		t.Error(comStr2)
 		t.Fail()
 	}
 	comStr3 := common(str8, str9)
-	if comStr3 != "a" {
+	if string(comStr3) != "a" {
 		t.Error(comStr3)
 		t.Fail()
 	}
 
 	comStr4 := common(str10, str9)
-	if comStr4 != "aBc哈124而89" {
+	if string(comStr4) != "aBc哈124而89" {
 		t.Error(comStr4)
 		t.Fail()
 	}
 
 	comStr5 := common(str11, str12)
-	if comStr5 != "aBc哈124*/&环境lk" {
+	if string(comStr5) != "aBc哈124*/&环境lk" {
 		t.Error(comStr5)
 		t.Fail()
 	}
 
 	comStr6 := common(str13, str14)
-	if comStr6 != "/#&*lk$@!plk0987738" {
+	if string(comStr6) != "/#&*lk$@!plk0987738" {
 		t.Error(comStr6)
 		t.Fail()
 	}
 	comStr7 := common(str15, str16)
-	if comStr7 != "fdja&&^%^002fdkajdk中就嗲司机93" {
+	if string(comStr7) != "fdja&&^%^002fdkajdk中就嗲司机93" {
 		t.Error(comStr7)
 		t.Fail()
 	}
 	comStr8 := common(str17, str18)
-	if comStr8 != "$^89()" {
+	if string(comStr8) != "$^89()" {
 		t.Error(comStr8)
 		t.Fail()
 	}
 
 	comStr9 := common(str19, str20)
-	if comStr9 != "0299381000099988/HJDJDJJ&&&90()-=122:><" {
+	if string(comStr9) != "0299381000099988/HJDJDJJ&&&90()-=122:><" {
 		t.Error(comStr9)
 		t.Fail()
 	}
 
 	comStr10 := common(str21, str22)
-	if comStr10 != "搭建积分地撒谎ifh**&&&………………————+：；》《MKKKKKK*分阶段看 发动机类似就" {
+	if string(comStr10) != "搭建积分地撒谎ifh**&&&………………————+：；》《MKKKKKK*分阶段看 发动机类似就" {
 		t.Error(comStr10)
 		t.Fail()
 	}
 
 	comStr11 := common(str23, str24)
-	if comStr11 != "    ()(*&&^^^^%%$$##!!!~@#$^&*((?>><??搭建积分地撒谎ifh**&&&………………————+：；》《MKKKKKK*分阶段看 发动机类似就" {
+	if string(comStr11) != "    ()(*&&^^^^%%$$##!!!~@#$^&*((?>><??搭建积分地撒谎ifh**&&&………………————+：；》《MKKKKKK*分阶段看 发动机类似就" {
 		t.Error(comStr11)
 		t.Fail()
 	}
@@ -119,12 +116,12 @@ func TestBoundary(t *testing.T) {
 	str3 := []byte{0xF1, 0x89, 0x93, 0xA2}
 	str4 := []byte{0xF1, 0x89, 0x93, 0xA2}
 
-	comStr := common("fndsbngjbask"+string(str1), "fndsbngjbask"+string(str2))
-	if comStr != "fndsbngjbask" {
+	comStr := common([]byte("fndsbngjbask"+string(str1)), []byte("fndsbngjbask"+string(str2)))
+	if string(comStr) != "fndsbngjbask" {
 		t.Error(comStr)
 		t.Fail()
 	}
-	comStr1 := common(string(str3), string(str4))
+	comStr1 := common(str3, str4)
 	com1 := []byte{0xF1, 0x89, 0x93, 0xA2}
 	rs := rune(com1[0]&mask4)<<18 | rune(com1[1]&maskx)<<12 | rune(com1[2]&maskx)<<6 | rune(com1[3]&maskx)
 	if rs <= rune3Max || MaxRune < rs {
@@ -133,9 +130,9 @@ func TestBoundary(t *testing.T) {
 		t.Error(MaxRune)
 		t.Error(rs)
 	}
-	if comStr1 != string(rs) {
+	if string(comStr1) != string(rs) {
 		//t.Error(string(rs))
-		t.Error(comStr1)
+		t.Error(string(comStr1))
 		t.Error(string(rs))
 		t.Fail()
 	}
@@ -186,7 +183,7 @@ func TestInsertion(t *testing.T) {
 	r.Insert("slow", "slow")
 	r.Insert("water", "water")
 	for _, d := range r.Root.Children {
-		if s := d.Value; decodeValueToKey(s) != d.Prefix {
+		if s := d.Value; decodeValueToKey(s) != string(d.Prefix) {
 			t.Errorf("d.Value = %s, want %s", s, d.Prefix)
 		}
 	}
