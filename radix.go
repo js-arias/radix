@@ -348,7 +348,7 @@ func getWholePrefix(n *radNode, offset int) string {
 }
 
 //return: false if full
-func save(l *list.List, limitCount int32, currentCount *int32, n *radNode, offset int, inc bool) bool {
+func save(l *list.List, limitCount int32, currentCount *int32, n *radNode, offset int, tp int, inc bool) bool {
 	if inc {
 		if *currentCount >= limitCount {
 			// logging.Debug("full")
@@ -357,10 +357,6 @@ func save(l *list.List, limitCount int32, currentCount *int32, n *radNode, offse
 	}
 
 	if n.Seq != ROOT_SEQ {
-		tp := RESULT_CONTENT
-		if len(n.Value) == 0 {
-			tp = RESULT_COMMON_PREFIX
-		}
 		// logging.Debug("save", getWholePrefix(n), n.Value)
 		l.PushBack(&Tuple{Key: getWholePrefix(n, offset), Value: n.Value, Type: tp})
 		if inc {
@@ -375,12 +371,12 @@ func (r *radNode) match(delimiter string, limitCount int32, limitLevel int, curr
 	logging.Info("checking", r.Prefix, "delimiter", delimiter, "value", r.Value)
 	if offset := strings.Index(r.Prefix, delimiter); len(delimiter) > 0 && offset >= 0 {
 		logging.Info("delimiter", delimiter, "found")
-		save(l, limitCount, currentCount, r, offset+1, true)
+		save(l, limitCount, currentCount, r, offset+1, RESULT_COMMON_PREFIX, true)
 		return false
 	}
 
 	if len(r.Value) > 0 { //leaf node
-		ok := save(l, limitCount, currentCount, r, len(r.Prefix), true)
+		ok := save(l, limitCount, currentCount, r, len(r.Prefix), RESULT_CONTENT, true)
 		if len(r.Children) == 0 || !ok {
 			return false
 		}
