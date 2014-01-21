@@ -77,11 +77,11 @@ func (self *Levelstorage) ReadNode(key string) ([]byte, error) {
 	return self.db.Get(self.ro, []byte(key))
 }
 
-func (self *Levelstorage) DelNode(key string) error {
+func (self *Levelstorage) DelNode(key []byte) error {
 	if len(key) == 0 {
 		logging.Fatal("zero key found")
 	}
-	self.currentBatch.Delete([]byte(key))
+	self.currentBatch.Delete(key)
 	return nil
 }
 

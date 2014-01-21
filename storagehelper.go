@@ -111,7 +111,7 @@ func (self *helper) persistentNode(n *radNode, value []byte) error {
 
 func (self *helper) delNodeFromStorage(seq int64) error {
 	seqStr := strconv.FormatInt(seq, 10)
-	if err := self.store.DelNode(seqStr); err != nil {
+	if err := self.store.DelNode([]byte(seqStr)); err != nil {
 		logging.Fatal(err)
 		return err
 	}

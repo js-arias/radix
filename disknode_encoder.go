@@ -16,7 +16,7 @@ func NewradDiskNodeJSONEncoder(w io.Writer) *radDiskNodeJSONEncoder {
 }
 
 func Marshal(v interface{}) (data []byte, err error) {
-	var b bytes.Buffer
+	b := bytes.Buffer{}
 	encoder := radDiskNodeJSONEncoder{w: &b}
 	n, ok := v.(*radDiskNode)
 	if !ok {

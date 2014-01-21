@@ -2,7 +2,7 @@ package radix
 
 const (
 	ROOT_SEQ            = -1
-	INTERNAL_KEY_PREFIX = "k"
+	INTERNAL_KEY_PREFIX = 'k'
 )
 
 const (
@@ -135,8 +135,11 @@ func common(s []byte, t []byte) []byte {
 	return cloneByteSlice(s[:ind])
 }
 
-func encodeValueToInternalKey(value string) string {
-	return INTERNAL_KEY_PREFIX + value
+func encodeValueToInternalKey(value []byte) []byte {
+	s := make([]byte, len(value)+1)
+	copy(s[1:], value)
+	s[0] = INTERNAL_KEY_PREFIX
+	return s
 }
 
 func decodeValueToKey(value string) string {

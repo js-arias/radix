@@ -236,8 +236,6 @@ func (self *Radix) Delete(key string) []byte {
 
 // Insert put a Value in the radix. It returns old value if exist
 func (self *Radix) Insert(key string, Value string) ([]byte, error) {
-	internalKey := []byte(encodeValueToInternalKey(key))
-
 	start := time.Now()
 	defer func() {
 		if n := time.Since(start).Nanoseconds() / 1000 / 1000; n > 500 {
@@ -247,6 +245,7 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 
 	k := []byte(key)
 	v := []byte(Value)
+	internalKey := encodeValueToInternalKey(k)
 
 	self.lock.Lock()
 
@@ -275,10 +274,9 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 }
 
 func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) {
-	internalKey := []byte(encodeValueToInternalKey(key))
-
 	k := []byte(key)
 	v := []byte(Value)
+	internalKey := encodeValueToInternalKey(k)
 
 	self.lock.Lock()
 	defer func() {

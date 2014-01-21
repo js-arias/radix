@@ -7,7 +7,7 @@ type Storage interface {
 	Rollback() error
 	ReadNode(seq string) ([]byte, error)
 	WriteNode(seq string, value []byte) error
-	DelNode(seq string) error
+	DelNode(seq []byte) error
 	DeleteKey(key []byte) error
 	PutKey(key []byte, value []byte) error
 	GetKey(key []byte) ([]byte, error)
