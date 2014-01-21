@@ -17,13 +17,17 @@ func TestEncodeDecode(t *testing.T) {
 	en := NewradDiskNodeJSONEncoder(b)
 	en.Encode(&n)
 
-	// println(b.String())
+	buf, err := Marshal(&n)
+	if err != nil {
+		t.Error(err)
+	}
 
-	buf := b.Bytes()
+	// println(b.String())
 	println(len(buf), string(buf))
-	de := NewradDiskNodeJSONDecoder(buf)
-	var x *radDiskNode
-	if err := de.Decode(&x); err != nil {
+
+	var x radDiskNode
+
+	if err := Unmarshal(buf, &x); err != nil {
 		t.Error(err)
 		return
 	}

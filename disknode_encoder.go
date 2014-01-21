@@ -1,6 +1,8 @@
 package radix
 
 import (
+	"bytes"
+	"errors"
 	"github.com/ngaut/megajson/encoder"
 	"io"
 )
@@ -11,6 +13,17 @@ type radDiskNodeJSONEncoder struct {
 
 func NewradDiskNodeJSONEncoder(w io.Writer) *radDiskNodeJSONEncoder {
 	return &radDiskNodeJSONEncoder{w: w}
+}
+
+func Marshal(v interface{}) (data []byte, err error) {
+	var b bytes.Buffer
+	encoder := radDiskNodeJSONEncoder{w: &b}
+	n, ok := v.(*radDiskNode)
+	if !ok {
+		return nil, errors.New("invalid type, should be *radDiskNode")
+	}
+	err = encoder.Encode(n)
+	return b.Bytes(), err
 }
 
 func (e *radDiskNodeJSONEncoder) Encode(v *radDiskNode) error {
@@ -33,43 +46,50 @@ func (e *radDiskNodeJSONEncoder) Encode(v *radDiskNode) error {
 	if err := encoder.WriteByte(e.w, ','); err != nil {
 		return err
 	}
-	if err := encoder.WriteString(e.w, "c"); err != nil {
-		return err
-	}
-	if err := encoder.WriteByte(e.w, ':'); err != nil {
-		return err
-	}
-	if err := encoder.WriteByte(e.w, '['); err != nil {
-		return err
-	}
-	for index, elem := range v.Children {
-		if index > 0 {
-			if err := encoder.WriteByte(e.w, ','); err != nil {
+
+	if len(v.Children) > 0 {
+		if err := encoder.WriteString(e.w, "c"); err != nil {
+			return err
+		}
+		if err := encoder.WriteByte(e.w, ':'); err != nil {
+			return err
+		}
+		if err := encoder.WriteByte(e.w, '['); err != nil {
+			return err
+		}
+		for index, elem := range v.Children {
+			if index > 0 {
+				if err := encoder.WriteByte(e.w, ','); err != nil {
+					return err
+				}
+			}
+			if err := encoder.WriteInt64(e.w, elem); err != nil {
 				return err
 			}
 		}
-		if err := encoder.WriteInt64(e.w, elem); err != nil {
+		if err := encoder.WriteByte(e.w, ']'); err != nil {
+			return err
+		}
+		if err := encoder.WriteByte(e.w, ','); err != nil {
 			return err
 		}
 	}
-	if err := encoder.WriteByte(e.w, ']'); err != nil {
-		return err
+
+	if len(v.Value) > 0 { //handle empty val
+		if err := encoder.WriteString(e.w, "val"); err != nil {
+			return err
+		}
+		if err := encoder.WriteByte(e.w, ':'); err != nil {
+			return err
+		}
+		if err := encoder.WriteString(e.w, v.Value); err != nil {
+			return err
+		}
+		if err := encoder.WriteByte(e.w, ','); err != nil {
+			return err
+		}
 	}
-	if err := encoder.WriteByte(e.w, ','); err != nil {
-		return err
-	}
-	if err := encoder.WriteString(e.w, "val"); err != nil {
-		return err
-	}
-	if err := encoder.WriteByte(e.w, ':'); err != nil {
-		return err
-	}
-	if err := encoder.WriteString(e.w, v.Value); err != nil {
-		return err
-	}
-	if err := encoder.WriteByte(e.w, ','); err != nil {
-		return err
-	}
+
 	if err := encoder.WriteString(e.w, "ver"); err != nil {
 		return err
 	}

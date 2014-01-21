@@ -7,6 +7,7 @@ import (
 	"strconv"
 )
 
+//todo: scanner pool for reusing it
 type radDiskNodeJSONDecoder struct {
 	s scanner.Scanner
 }
@@ -27,22 +28,28 @@ func Newint64JSONScanDecoder(s scanner.Scanner) *int64JSONDecoder {
 	return &int64JSONDecoder{s: s}
 }
 
-func (e *radDiskNodeJSONDecoder) Decode(ptr **radDiskNode) error {
+func Unmarshal(data []byte, v interface{}) error {
+	n, ok := v.(*radDiskNode)
+	if !ok {
+		return errors.New("type should be *radDiskNode")
+	}
+
+	decoder := &radDiskNodeJSONDecoder{s: scanner.NewScanner(data)}
+	return decoder.Decode(n)
+}
+
+func (e *radDiskNodeJSONDecoder) Decode(ptr *radDiskNode) error {
 	s := e.s
 	if tok, tokval, err := s.Scan(); err != nil {
 		return err
 	} else if tok == scanner.TNULL {
-		*ptr = nil
 		return nil
 	} else if tok != scanner.TLBRACE {
 		return fmt.Errorf("Unexpected %s at %d: %s; expected '{'", scanner.TokenName(tok), s.Pos(), string(tokval))
 	}
 
 	// Create the object if it doesn't exist.
-	if *ptr == nil {
-		*ptr = &radDiskNode{}
-	}
-	v := *ptr
+	v := ptr
 
 	// Loop over key/value pairs.
 	index := 0
@@ -157,45 +164,6 @@ func (e *int64JSONDecoder) DecodeArray(ptr *[]int64) error {
 			return err
 		}
 		slice = append(slice, int64(item))
-
-		index++
-	}
-}
-
-func (e *radDiskNodeJSONDecoder) DecodeArray(ptr *[]*radDiskNode) error {
-	s := e.s
-	if tok, _, err := s.Scan(); err != nil {
-		return err
-	} else if tok != scanner.TLBRACKET {
-		return errors.New("Expected '['")
-	}
-
-	slice := make([]*radDiskNode, 0)
-
-	// Loop over items.
-	index := 0
-	for {
-		tok, tokval, err := s.Scan()
-		if err != nil {
-			return err
-		} else if tok == scanner.TRBRACKET {
-			*ptr = slice
-			return nil
-		} else if tok == scanner.TCOMMA {
-			if index == 0 {
-				return fmt.Errorf("Unexpected comma in array at %d", s.Pos())
-			}
-			if tok, tokval, err = s.Scan(); err != nil {
-				return err
-			}
-		}
-		s.Unscan(tok, tokval)
-
-		item := &radDiskNode{}
-		if err := e.Decode(&item); err != nil {
-			return err
-		}
-		slice = append(slice, item)
 
 		index++
 	}

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/ngaut/logging"
 	//enc "labix.org/v2/mgo/bson"
-	"bytes"
+	// "bytes"
 	// enc "encoding/json"
 	"math/rand"
 	"strconv"
@@ -46,7 +46,7 @@ func (self *helper) work() {
 	for req := range self.reqch {
 		n, err := self.readRadDiskNode(req.seq)
 		if err != nil {
-			panic("should never happend")
+			logging.Fatalf("should never happend %+v", req)
 			req.resultCh <- &readResult{nil, err}
 			continue
 		}
@@ -85,12 +85,7 @@ func (self *helper) persistentNode(n *radNode, value []byte) error {
 	x := self.makeRadDiskNode(n)
 
 	seq := strconv.FormatInt(x.Seq, 10)
-	// buf, err := enc.Marshal(x)
-	b := bytes.NewBuffer(make([]byte, 1024))
-	en := NewradDiskNodeJSONEncoder(b)
-	err := en.Encode(x)
-	buf := b.Bytes()
-
+	buf, err := Marshal(x) //enc.Marshal(x)
 	if err != nil {
 		logging.Fatal(err)
 		return err
@@ -148,10 +143,6 @@ func (self *helper) GetValueFromStore(key string) ([]byte, error) {
 	return self.store.GetKey(key)
 }
 
-func (self *helper) readWorker() {
-
-}
-
 func (self *helper) readRadDiskNode(seq int64) (*radDiskNode, error) {
 	buf, err := self.store.ReadNode(strconv.FormatInt(seq, 10))
 	if err != nil {
@@ -165,23 +156,14 @@ func (self *helper) readRadDiskNode(seq int64) (*radDiskNode, error) {
 		return nil, fmt.Errorf("get key %d failed", seq)
 	}
 
-	// var x radDiskNode
-	// err = enc.Unmarshal(buf, &x)
-	// if err != nil {
-	// 	logging.Fatal(err)
-	// 	return nil, err
-	// }
-
-	// return &x, nil
-
-	var x *radDiskNode
-	de := NewradDiskNodeJSONDecoder(buf)
-	if err := de.Decode(&x); err != nil {
+	var x radDiskNode
+	err = Unmarshal(buf, &x) //enc.Unmarshal(buf, &x)
+	if err != nil {
 		logging.Fatal(err)
 		return nil, err
 	}
 
-	return x, nil
+	return &x, nil
 }
 
 func (self *helper) getNodeFromDisk(n *radNode) error {
