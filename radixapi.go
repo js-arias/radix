@@ -236,7 +236,7 @@ func (self *Radix) Delete(key string) []byte {
 
 // Insert put a Value in the radix. It returns old value if exist
 func (self *Radix) Insert(key string, Value string) ([]byte, error) {
-	internalKey := encodeValueToInternalKey(key)
+	internalKey := []byte(encodeValueToInternalKey(key))
 
 	start := time.Now()
 	defer func() {
@@ -275,7 +275,7 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 }
 
 func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) {
-	internalKey := encodeValueToInternalKey(key)
+	internalKey := []byte(encodeValueToInternalKey(key))
 
 	k := []byte(key)
 	v := []byte(Value)
@@ -339,7 +339,7 @@ func (self *Radix) FindInternalKey(key string) string {
 	defer self.lock.RUnlock()
 
 	if x, _, _ := self.Root.lookup(k, self); x != nil {
-		return x.Value
+		return string(x.Value)
 	}
 
 	return ""
@@ -401,7 +401,7 @@ func (self *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, l
 		tuple := e.Value.(*Tuple)
 		key := tuple.Value
 		if tuple.Type == RESULT_CONTENT {
-			value, err := self.h.store.GetKey(key)
+			value, err := self.h.store.GetKey([]byte(key))
 			if err != nil {
 				logging.Error("should never happend", e.Value)
 				continue

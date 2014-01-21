@@ -73,13 +73,13 @@ func (self *helper) allocSeq() int64 {
 
 func (self *helper) makeRadDiskNode(n *radNode) *radDiskNode {
 	//todo: clean up []byte<->string conversion
-	return &radDiskNode{Prefix: string(n.Prefix), Children: n.cloneChildrenSeq(), Value: n.Value, Version: n.Version,
+	return &radDiskNode{Prefix: string(n.Prefix), Children: n.cloneChildrenSeq(), Value: string(n.Value), Version: n.Version,
 		Seq: n.Seq}
 }
 
 func (self *helper) makeRadNode(x *radDiskNode) *radNode {
 	//todo: clean up []byte<->string conversion
-	return &radNode{Prefix: []byte(x.Prefix), Children: nil, Value: x.Value, Version: x.Version,
+	return &radNode{Prefix: []byte(x.Prefix), Children: nil, Value: []byte(x.Value), Version: x.Version,
 		Seq: x.Seq, Stat: statOnDisk}
 }
 
@@ -119,7 +119,7 @@ func (self *helper) delNodeFromStorage(seq int64) error {
 	return nil
 }
 
-func (self *helper) delFromStoragebyKey(key string) error {
+func (self *helper) delFromStoragebyKey(key []byte) error {
 	err := self.store.DeleteKey(key)
 	if err != nil {
 		logging.Fatal(err)
@@ -141,7 +141,7 @@ func (self *helper) ResetInMemoryNodeCount() {
 	atomic.StoreInt64(&self.inmemoryNodeCount, 0)
 }
 
-func (self *helper) GetValueFromStore(key string) ([]byte, error) {
+func (self *helper) GetValueFromStore(key []byte) ([]byte, error) {
 	return self.store.GetKey(key)
 }
 

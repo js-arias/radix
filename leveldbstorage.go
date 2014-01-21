@@ -121,28 +121,28 @@ func (self *Levelstorage) GetLastSeq() (int64, error) {
 	return strconv.ParseInt(string(seqstr), 10, 64)
 }
 
-func (self *Levelstorage) DeleteKey(key string) error {
+func (self *Levelstorage) DeleteKey(key []byte) error {
 	if len(key) == 0 {
 		logging.Fatal("zero key found")
 	}
-	self.currentBatch.Delete([]byte(key))
+	self.currentBatch.Delete(key)
 	return nil
 }
 
-func (self *Levelstorage) PutKey(key string, value []byte) error {
+func (self *Levelstorage) PutKey(key []byte, value []byte) error {
 	if len(key) == 0 {
 		logging.Fatal("zero key found")
 	}
-	self.currentBatch.Put([]byte(key), value)
+	self.currentBatch.Put(key, value)
 	return nil
 }
 
-func (self *Levelstorage) GetKey(key string) ([]byte, error) {
+func (self *Levelstorage) GetKey(key []byte) ([]byte, error) {
 	if len(key) == 0 {
 		panic("key can't be nil")
 		logging.Fatal("zero key found")
 	}
-	return self.db.Get(self.ro, []byte(key))
+	return self.db.Get(self.ro, key)
 }
 
 func (self *Levelstorage) internalStats() string {

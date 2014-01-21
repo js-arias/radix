@@ -16,7 +16,7 @@ import (
 type radNode struct {
 	Prefix   []byte // current prefix of the node
 	Children []*radNode
-	Value    string // stored key
+	Value    []byte // stored key
 	Version  int64
 	father   *radNode
 	Seq      int64
@@ -116,7 +116,7 @@ func (self *Radix) deleteNode(n *radNode) {
 		if err != nil {
 			logging.Fatal(err)
 		}
-		n.Value = ""
+		n.Value = nil
 	}
 
 	logging.Info(n.Seq, n.father.Seq)
@@ -194,7 +194,7 @@ func (r *radNode) delete(key []byte, tree *Radix) []byte {
 }
 
 // implements insert or replace, return nil, nil if this a new value
-func (r *radNode) put(key []byte, Value []byte, internalKey string, version int64, force bool, tree *Radix) ([]byte, error) {
+func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int64, force bool, tree *Radix) ([]byte, error) {
 	logging.Info("insert", internalKey, "--", string(Value), r.Prefix)
 
 	tree.h.getChildrenByNode(r)
@@ -293,7 +293,7 @@ func (r *radNode) put(key []byte, Value []byte, internalKey string, version int6
 		tree.h.persistentNode(n, Value)
 
 		d.Prefix = comm //no need to clone, we can reuse comm
-		d.Value = ""
+		d.Value = nil
 		d.Children = make([]*radNode, 2, 2)
 		d.Children[0] = p
 		d.Children[1] = n
@@ -323,7 +323,7 @@ func (r *radNode) addToList(l *list.List, tree *Radix) {
 	// logging.Infof("checking %+v", r)
 	if len(r.Value) > 0 {
 		logging.Info("push", r.Value)
-		l.PushBack(decodeValueToKey(r.Value))
+		l.PushBack(decodeValueToKey(string(r.Value)))
 	}
 	for _, d := range r.Children {
 		d.addToList(l, tree)
@@ -358,7 +358,7 @@ func save(l *list.List, limitCount int32, currentCount *int32, n *radNode, offse
 
 	if n.Seq != ROOT_SEQ {
 		// logging.Debug("save", getWholePrefix(n), n.Value)
-		l.PushBack(&Tuple{Key: getWholePrefix(n, offset), Value: n.Value, Type: tp})
+		l.PushBack(&Tuple{Key: getWholePrefix(n, offset), Value: string(n.Value), Type: tp})
 		if inc {
 			*currentCount += 1
 		}

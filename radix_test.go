@@ -183,7 +183,7 @@ func TestInsertion(t *testing.T) {
 	r.Insert("slow", "slow")
 	r.Insert("water", "water")
 	for _, d := range r.Root.Children {
-		if s := d.Value; decodeValueToKey(s) != string(d.Prefix) {
+		if s := string(d.Value); decodeValueToKey(s) != string(d.Prefix) {
 			t.Errorf("d.Value = %s, want %s", s, d.Prefix)
 		}
 	}

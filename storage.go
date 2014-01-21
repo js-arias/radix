@@ -8,9 +8,9 @@ type Storage interface {
 	ReadNode(seq string) ([]byte, error)
 	WriteNode(seq string, value []byte) error
 	DelNode(seq string) error
-	DeleteKey(key string) error
-	PutKey(key string, value []byte) error
-	GetKey(key string) ([]byte, error)
+	DeleteKey(key []byte) error
+	PutKey(key []byte, value []byte) error
+	GetKey(key []byte) ([]byte, error)
 	Close() error
 	SaveLastSeq(int64) error
 	GetLastSeq() (int64, error)
