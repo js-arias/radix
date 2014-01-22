@@ -40,30 +40,36 @@ func (self *Levelstorage) Open(path string) (err error) {
 }
 
 func (self *Levelstorage) BeginWriteBatch() error {
+	l.Lock()
 	if self.currentBatch != nil {
 		logging.Fatal("writebatch already exist")
 	}
 
 	self.currentBatch = leveldb.NewWriteBatch()
+	l.Unlock()
 	return nil
 }
 
 func (self *Levelstorage) CommitWriteBatch() error {
+	l.Lock()
 	if self.currentBatch == nil {
 		logging.Fatal("need to call BeginWriteBatch first")
 	}
 	err := self.db.Write(self.wo, self.currentBatch)
 	self.currentBatch.Close()
 	self.currentBatch = nil
+	l.Unlock()
 	return err
 }
 
 func (self *Levelstorage) Rollback() error {
+	l.Lock()
 	if self.currentBatch == nil {
 		logging.Fatal("need to call BeginWriteBatch first")
 	}
 	self.currentBatch.Close()
 	self.currentBatch = nil
+	l.Unlock()
 	return nil
 }
 

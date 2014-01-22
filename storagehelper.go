@@ -5,7 +5,7 @@ import (
 	"github.com/ngaut/logging"
 	//enc "labix.org/v2/mgo/bson"
 	// "bytes"
-	// enc "encoding/json"
+	enc "encoding/json"
 	"math/rand"
 	"strconv"
 	"sync/atomic"
@@ -87,7 +87,7 @@ func (self *helper) persistentNode(n *radNode, value []byte) error {
 	x := self.makeRadDiskNode(n)
 
 	seq := strconv.FormatInt(x.Seq, 10)
-	buf, err := Marshal(x) //enc.Marshal(x)
+	buf, err := enc.Marshal(x) //Marshal(x)
 	if err != nil {
 		logging.Fatal(err)
 		return err
@@ -159,7 +159,7 @@ func (self *helper) readRadDiskNode(seq int64) (*radDiskNode, error) {
 	}
 
 	var x radDiskNode
-	err = Unmarshal(buf, &x) //enc.Unmarshal(buf, &x)
+	err = enc.Unmarshal(buf, &x) //Unmarshal(buf, &x)
 	if err != nil {
 		logging.Fatal(err)
 		return nil, err
