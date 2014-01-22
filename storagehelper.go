@@ -73,7 +73,7 @@ func (self *helper) makeRadDiskNode(n *radNode) *radDiskNode {
 
 func (self *helper) makeRadNode(x *radDiskNode, seq int64) *radNode {
 	return &radNode{Prefix: x.Prefix, Value: x.Value, Version: x.Version,
-		Seq: seq, Stat: statOnDisk}
+		Seq: seq, Stat: statOnDisk} //todo: if len(x.Children) == 0, Stat can be inMemory
 }
 
 func (self *helper) persistentNode(n *radNode, value []byte) error {
