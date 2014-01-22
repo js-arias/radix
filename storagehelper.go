@@ -326,3 +326,7 @@ func (self *helper) DumpMemNode(node *radNode, level int) error {
 
 	return nil
 }
+
+func (self *helper) close() {
+	close(self.reqch)
+}

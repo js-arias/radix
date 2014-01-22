@@ -26,7 +26,16 @@ type Radix struct {
 	//for calc
 	lastInsertNodeCnt int64
 
-	tick *time.Ticker
+	tick    *time.Ticker
+	closech chan bool
+
+	persistentCh chan persistentArg
+	wg           sync.WaitGroup
+}
+
+type persistentArg struct {
+	n     *radNode
+	value []byte
 }
 
 const (
@@ -62,8 +71,10 @@ func Open(path string) *Radix {
 	tree := &Radix{
 		Root: &radNode{
 			Seq: ROOT_SEQ, Stat: statOnDisk},
-		path: filepath.Join(path, "/db"),
-		h:    NewHelper(&Levelstorage{}, ROOT_SEQ),
+		path:         filepath.Join(path, "/db"),
+		h:            NewHelper(&Levelstorage{}, ROOT_SEQ),
+		closech:      make(chan bool),
+		persistentCh: make(chan persistentArg, 5),
 	}
 
 	tree.lock.Lock()
@@ -98,6 +109,9 @@ func Open(path string) *Radix {
 	tree.tick = time.NewTicker(10 * time.Second)
 
 	go tree.superVistor()
+	for i := 0; i < 5; i++ {
+		go tree.persistentWorker()
+	}
 
 	return tree
 }
@@ -119,18 +133,25 @@ func (self *Radix) calcSpeed() {
 func (self *Radix) superVistor() {
 	for {
 		select {
-		case _, ok := <-self.tick.C:
-			if !ok {
-				return
-			}
-
+		case <-self.tick.C:
 			self.lock.Lock()
 			self.calcSpeed()
 			self.addNodesCallBack()
 			self.lock.Unlock()
 
 			// logging.Debug("tick for checking nodes")
+		case _, ok := <-self.closech:
+			if !ok {
+				return
+			}
 		}
+	}
+}
+
+func (self *Radix) persistentWorker() {
+	for arg := range self.persistentCh {
+		self.h.persistentNode(arg.n, arg.value)
+		self.wg.Done()
 	}
 }
 
@@ -163,7 +184,10 @@ func (self *Radix) addNodesCallBack() {
 
 func (self *Radix) cleanup() error {
 	self.tick.Stop()
+	close(self.persistentCh)
+	close(self.closech)
 	self.h.ResetInMemoryNodeCount()
+	self.h.close()
 	return self.h.store.Close()
 }
 

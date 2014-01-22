@@ -6,6 +6,7 @@ import (
 	leveldb "github.com/jmhodges/levigo"
 	"github.com/ngaut/logging"
 	"strconv"
+	"sync"
 )
 
 type Levelstorage struct {
@@ -18,6 +19,8 @@ type Levelstorage struct {
 }
 
 var LAST_SEQ_KEY = []byte("##LAST_SEQ_KEY")
+
+var l sync.Mutex
 
 func (self *Levelstorage) Open(path string) (err error) {
 	self.ro = leveldb.NewReadOptions()
@@ -65,7 +68,9 @@ func (self *Levelstorage) Rollback() error {
 }
 
 func (self *Levelstorage) WriteNode(key string, value []byte) error {
+	l.Lock()
 	self.currentBatch.Put([]byte(key), value)
+	l.Unlock()
 	return nil
 }
 
@@ -81,7 +86,9 @@ func (self *Levelstorage) DelNode(key []byte) error {
 	if len(key) == 0 {
 		logging.Fatal("zero key found")
 	}
+	l.Lock()
 	self.currentBatch.Delete(key)
+	l.Unlock()
 	return nil
 }
 
@@ -104,7 +111,9 @@ func (self *Levelstorage) Close() error {
 
 func (self *Levelstorage) SaveLastSeq(seq int64) error {
 	seqstr := strconv.FormatInt(seq, 10)
+	l.Lock()
 	self.currentBatch.Put(LAST_SEQ_KEY, []byte(seqstr))
+	l.Unlock()
 	return nil
 }
 
@@ -125,7 +134,9 @@ func (self *Levelstorage) DeleteKey(key []byte) error {
 	if len(key) == 0 {
 		logging.Fatal("zero key found")
 	}
+	l.Lock()
 	self.currentBatch.Delete(key)
+	l.Unlock()
 	return nil
 }
 
@@ -133,7 +144,9 @@ func (self *Levelstorage) PutKey(key []byte, value []byte) error {
 	if len(key) == 0 {
 		logging.Fatal("zero key found")
 	}
+	l.Lock()
 	self.currentBatch.Put(key, value)
+	l.Unlock()
 	return nil
 }
 
