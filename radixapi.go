@@ -2,6 +2,7 @@ package radix
 
 import (
 	"container/list"
+	"fmt"
 	"github.com/ngaut/logging"
 	"log"
 	"math/rand"
@@ -458,4 +459,42 @@ func (self *Radix) SetMaxInMemoryNodeCount(count int64) {
 	defer self.lock.RUnlock()
 
 	self.MaxInMemoryNodeCount = count
+}
+
+func (self *Radix) StoragePut(key, value []byte) error {
+	if len(key) == 0 || len(value) == 0 {
+		return fmt.Errorf("key and value can't be nil: %s-%s", string(key), string(value))
+	}
+
+	self.lock.RLock()
+	defer self.lock.RUnlock()
+
+	if key[0] != '*' {
+		return fmt.Errorf("key should start with *", string(key))
+	}
+
+	self.h.store.BeginWriteBatch()
+
+	err := self.h.store.PutKey(key, value)
+	if err != nil {
+		self.h.store.Rollback()
+		return err
+	}
+
+	return self.h.store.CommitWriteBatch()
+}
+
+func (self *Radix) StorageGet(key []byte) ([]byte, error) {
+	if len(key) == 0 {
+		return nil, fmt.Errorf("key and value can't be nil: %s", string(key))
+	}
+
+	if key[0] != '*' {
+		return nil, fmt.Errorf("key should start with *", string(key))
+	}
+
+	self.lock.RLock()
+	defer self.lock.RUnlock()
+
+	return self.h.store.GetKey(key)
 }

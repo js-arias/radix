@@ -175,6 +175,37 @@ func TestDeleteAll(t *testing.T) {
 	}
 }
 
+func TestStorageGetSet(t *testing.T) {
+	r := Open(".")
+	defer r.Destory()
+
+	if err := r.StoragePut([]byte("key"), []byte("value")); err == nil {
+		t.Error("should not be nil")
+	}
+
+	if _, err := r.StorageGet([]byte("key")); err == nil {
+		t.Error("should not be nil")
+	}
+
+	//test empty get/put
+	if err := r.StoragePut(nil, []byte("value")); err == nil {
+		t.Error("should not be nil")
+	}
+
+	if _, err := r.StorageGet(nil); err == nil {
+		t.Error("should not be nil")
+	}
+
+	if err := r.StoragePut([]byte("*key"), []byte("value")); err != nil {
+		t.Error("should be nil")
+	}
+
+	if v, err := r.StorageGet([]byte("*key")); err != nil || string(v) != "value" {
+		t.Errorf("expect value but got %s", string(v))
+	}
+
+}
+
 func TestInsertion(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()

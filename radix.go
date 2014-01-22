@@ -193,132 +193,9 @@ func (r *radNode) delete(key []byte, tree *Radix) []byte {
 	return nil
 }
 
-// // implements insert or replace, return nil, nil if this a new value
-// func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int64, force bool, tree *Radix) ([]byte, error) {
-// 	logging.Info("insert", internalKey, "--", string(Value), r.Prefix)
-
-// 	tree.h.getChildrenByNode(r)
-
-// 	for _, d := range r.Children {
-// 		// tree.h.getChildrenByNode(d)
-// 		if len(d.Prefix) == 0 { //check
-// 			panic("never happend")
-// 		}
-
-// 		comm := common(key, d.Prefix)
-// 		if len(comm) == 0 {
-// 			continue
-// 		}
-
-// 		if len(comm) == len(key) {
-// 			if len(comm) == len(d.Prefix) {
-// 				if len(d.Value) == 0 {
-// 					d.Value = internalKey
-// 					tree.h.getChildrenByNode(d)
-// 					tree.h.persistentNode(d, Value) //todo: children seq not changed
-// 					// tree.h.persistentNode(d.father, nil)
-// 					return nil, nil
-// 				}
-
-// 				if force || version == d.Version {
-// 					d.Value = internalKey
-// 					orgValue, err := tree.h.GetValueFromStore(d.Value)
-// 					if err != nil {
-// 						logging.Fatal(err)
-// 					}
-// 					d.Version++
-// 					tree.h.getChildrenByNode(d)
-// 					tree.h.persistentNode(d, Value) //todo: children seq not changed
-// 					// tree.h.persistentNode(d.father, nil)
-// 					return orgValue, nil
-// 				}
-
-// 				// logging.Infof("version not match, version is %d, but you provide %d, %+v", d.Version, version, d)
-// 				return nil, fmt.Errorf("key: %s, version not match, version is %d, but you provide %d, %+v", internalKey, d.Version, version, d)
-// 			}
-
-// 			tree.h.getChildrenByNode(d)
-
-// 			//ex: ab, insert a
-// 			n := &radNode{
-// 				Prefix:   cloneByteSlice(d.Prefix[len(comm):]),
-// 				Value:    d.Value,
-// 				father:   d,
-// 				Children: d.Children,
-// 				Seq:      tree.h.allocSeq(),
-// 			}
-// 			//adjust father
-// 			adjustFather(n)
-// 			tree.h.AddInMemoryNodeCount(1)
-// 			tree.h.persistentNode(n, nil)
-
-// 			d.Children = make([]*radNode, 1, 1)
-// 			d.Children[0] = n
-// 			d.Prefix = comm //todo: no need to clone, we can reuse comm
-// 			d.Value = internalKey
-// 			tree.h.persistentNode(d, Value)
-// 			// tree.h.persistentNode(d.father, nil)
-// 			return nil, nil
-// 		}
-
-// 		//ex: a, insert ab
-// 		if len(comm) == len(d.Prefix) {
-// 			return d.put(key[len(comm):], Value, internalKey, version, force, tree)
-// 		}
-
-// 		tree.h.getChildrenByNode(d)
-
-// 		//ex: ab, insert ac, extra common a
-// 		p := &radNode{
-// 			Prefix:   cloneByteSlice(d.Prefix[len(comm):]),
-// 			Value:    d.Value,
-// 			father:   d,
-// 			Children: d.Children,
-// 			Seq:      tree.h.allocSeq(),
-// 		}
-// 		//adjust father
-// 		adjustFather(p)
-// 		tree.h.AddInMemoryNodeCount(1)
-
-// 		tree.h.persistentNode(p, nil)
-// 		n := &radNode{
-// 			Prefix: cloneByteSlice(key[len(comm):]),
-// 			Value:  internalKey,
-// 			father: d,
-// 			Seq:    tree.h.allocSeq(),
-// 		}
-// 		tree.h.AddInMemoryNodeCount(1)
-
-// 		tree.h.persistentNode(n, Value)
-
-// 		d.Prefix = comm //no need to clone, we can reuse comm
-// 		d.Value = nil
-// 		d.Children = make([]*radNode, 2, 2)
-// 		d.Children[0] = p
-// 		d.Children[1] = n
-
-// 		tree.h.persistentNode(d, nil)
-// 		// tree.h.persistentNode(d.father, nil)
-// 		return nil, nil
-// 	}
-
-// 	n := &radNode{
-// 		Prefix: cloneByteSlice(key),
-// 		Value:  internalKey,
-// 		father: r,
-// 		Seq:    tree.h.allocSeq(),
-// 	}
-// 	tree.h.AddInMemoryNodeCount(1)
-// 	tree.h.persistentNode(n, Value)
-// 	r.Children = append(r.Children, n)
-// 	tree.h.persistentNode(r, nil)
-
-// 	return nil, nil
-// }
-
 // implements insert or replace, return nil, nil if this a new value
 func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int64, force bool, tree *Radix) ([]byte, error) {
-	logging.Info("insert", internalKey, "--", string(Value), r.Prefix)
+	//logging.Info("insert", internalKey, "--", string(Value), r.Prefix)
 
 	tree.h.getChildrenByNode(r)
 
@@ -373,16 +250,13 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 			//adjust father
 			adjustFather(n)
 			tree.h.AddInMemoryNodeCount(1)
-
-			tree.wg.Add(1)
-			tree.persistentCh <- persistentArg{n: n, value: nil}
+			tree.h.persistentNode(n, nil)
 
 			d.Children = make([]*radNode, 1, 1)
 			d.Children[0] = n
 			d.Prefix = comm //todo: no need to clone, we can reuse comm
 			d.Value = internalKey
 			tree.h.persistentNode(d, Value)
-			tree.wg.Wait()
 			// tree.h.persistentNode(d.father, nil)
 			return nil, nil
 		}
@@ -406,9 +280,7 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 		adjustFather(p)
 		tree.h.AddInMemoryNodeCount(1)
 
-		tree.wg.Add(2)
-		tree.persistentCh <- persistentArg{n: p, value: nil}
-
+		tree.h.persistentNode(p, nil)
 		n := &radNode{
 			Prefix: cloneByteSlice(key[len(comm):]),
 			Value:  internalKey,
@@ -417,7 +289,7 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 		}
 		tree.h.AddInMemoryNodeCount(1)
 
-		tree.persistentCh <- persistentArg{n: n, value: Value}
+		tree.h.persistentNode(n, Value)
 
 		d.Prefix = comm //no need to clone, we can reuse comm
 		d.Value = nil
@@ -426,7 +298,6 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 		d.Children[1] = n
 
 		tree.h.persistentNode(d, nil)
-		tree.wg.Wait()
 		// tree.h.persistentNode(d.father, nil)
 		return nil, nil
 	}
@@ -438,16 +309,145 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 		Seq:    tree.h.allocSeq(),
 	}
 	tree.h.AddInMemoryNodeCount(1)
-
-	tree.wg.Add(1)
-	tree.persistentCh <- persistentArg{n: n, value: Value}
-
+	tree.h.persistentNode(n, Value)
 	r.Children = append(r.Children, n)
 	tree.h.persistentNode(r, nil)
-	tree.wg.Wait()
 
 	return nil, nil
 }
+
+// // implements insert or replace, return nil, nil if this a new value
+// func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int64, force bool, tree *Radix) ([]byte, error) {
+// 	// logging.Info("insert", internalKey, "--", string(Value), r.Prefix)
+
+// 	tree.h.getChildrenByNode(r)
+
+// 	for _, d := range r.Children {
+// 		// tree.h.getChildrenByNode(d)
+// 		if len(d.Prefix) == 0 { //check
+// 			panic("never happend")
+// 		}
+
+// 		comm := common(key, d.Prefix)
+// 		if len(comm) == 0 {
+// 			continue
+// 		}
+
+// 		if len(comm) == len(key) {
+// 			if len(comm) == len(d.Prefix) {
+// 				if len(d.Value) == 0 {
+// 					d.Value = internalKey
+// 					tree.h.getChildrenByNode(d)
+// 					tree.h.persistentNode(d, Value) //todo: children seq not changed
+// 					// tree.h.persistentNode(d.father, nil)
+// 					return nil, nil
+// 				}
+
+// 				if force || version == d.Version {
+// 					d.Value = internalKey
+// 					orgValue, err := tree.h.GetValueFromStore(d.Value)
+// 					if err != nil {
+// 						logging.Fatal(err)
+// 					}
+// 					d.Version++
+// 					tree.h.getChildrenByNode(d)
+// 					tree.h.persistentNode(d, Value) //todo: children seq not changed
+// 					// tree.h.persistentNode(d.father, nil)
+// 					return orgValue, nil
+// 				}
+
+// 				// logging.Infof("version not match, version is %d, but you provide %d, %+v", d.Version, version, d)
+// 				return nil, fmt.Errorf("key: %s, version not match, version is %d, but you provide %d, %+v", internalKey, d.Version, version, d)
+// 			}
+
+// 			tree.h.getChildrenByNode(d)
+
+// 			//ex: ab, insert a
+// 			n := &radNode{
+// 				Prefix:   cloneByteSlice(d.Prefix[len(comm):]),
+// 				Value:    d.Value,
+// 				father:   d,
+// 				Children: d.Children,
+// 				Seq:      tree.h.allocSeq(),
+// 			}
+// 			//adjust father
+// 			adjustFather(n)
+// 			tree.h.AddInMemoryNodeCount(1)
+
+// 			tree.wg.Add(1)
+// 			tree.persistentCh <- persistentArg{n: n, value: nil}
+
+// 			d.Children = make([]*radNode, 1, 1)
+// 			d.Children[0] = n
+// 			d.Prefix = comm //todo: no need to clone, we can reuse comm
+// 			d.Value = internalKey
+// 			tree.h.persistentNode(d, Value)
+// 			tree.wg.Wait()
+// 			// tree.h.persistentNode(d.father, nil)
+// 			return nil, nil
+// 		}
+
+// 		//ex: a, insert ab
+// 		if len(comm) == len(d.Prefix) {
+// 			return d.put(key[len(comm):], Value, internalKey, version, force, tree)
+// 		}
+
+// 		tree.h.getChildrenByNode(d)
+
+// 		//ex: ab, insert ac, extra common a
+// 		p := &radNode{
+// 			Prefix:   cloneByteSlice(d.Prefix[len(comm):]),
+// 			Value:    d.Value,
+// 			father:   d,
+// 			Children: d.Children,
+// 			Seq:      tree.h.allocSeq(),
+// 		}
+// 		//adjust father
+// 		adjustFather(p)
+// 		tree.h.AddInMemoryNodeCount(1)
+
+// 		tree.wg.Add(2)
+// 		tree.persistentCh <- persistentArg{n: p, value: nil}
+
+// 		n := &radNode{
+// 			Prefix: cloneByteSlice(key[len(comm):]),
+// 			Value:  internalKey,
+// 			father: d,
+// 			Seq:    tree.h.allocSeq(),
+// 		}
+// 		tree.h.AddInMemoryNodeCount(1)
+
+// 		tree.persistentCh <- persistentArg{n: n, value: Value}
+
+// 		d.Prefix = comm //no need to clone, we can reuse comm
+// 		d.Value = nil
+// 		d.Children = make([]*radNode, 2, 2)
+// 		d.Children[0] = p
+// 		d.Children[1] = n
+
+// 		tree.h.persistentNode(d, nil)
+// 		tree.wg.Wait()
+// 		// tree.h.persistentNode(d.father, nil)
+// 		return nil, nil
+// 	}
+
+// 	n := &radNode{
+// 		Prefix: cloneByteSlice(key),
+// 		Value:  internalKey,
+// 		father: r,
+// 		Seq:    tree.h.allocSeq(),
+// 	}
+// 	tree.h.AddInMemoryNodeCount(1)
+
+// 	tree.wg.Add(1)
+// 	tree.persistentCh <- persistentArg{n: n, value: Value}
+
+// 	r.Children = append(r.Children, n)
+// 	tree.h.persistentNode(r, nil)
+// 	tree.wg.Wait()
+
+// 	return nil, nil
+// }
 
 func (r *radNode) addToList(l *list.List, tree *Radix) {
 	tree.h.getChildrenByNode(r)
