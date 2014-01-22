@@ -466,12 +466,12 @@ func (self *Radix) StoragePut(key, value []byte) error {
 		return fmt.Errorf("key and value can't be nil: %s-%s", string(key), string(value))
 	}
 
-	self.lock.RLock()
-	defer self.lock.RUnlock()
-
 	if key[0] != '*' {
 		return fmt.Errorf("key should start with *", string(key))
 	}
+
+	self.lock.RLock()
+	defer self.lock.RUnlock()
 
 	self.h.store.BeginWriteBatch()
 

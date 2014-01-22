@@ -8,10 +8,6 @@ import (
 	"math/rand"
 )
 
-//todo:
-// api
-// move string<->[]byte conversion outside of lock
-
 // a node of a radix tree
 type radNode struct {
 	Prefix   []byte // current prefix of the node
@@ -56,7 +52,7 @@ func (self *Radix) getIndex(n *radNode) int {
 
 func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 	var latest *radNode
-	logging.Infof("pathCompression %+v, %+v", n, leaf)
+	// logging.Infof("pathCompression %+v, %+v", n, leaf)
 	if n.Seq == ROOT_SEQ {
 		logging.Infof("persistent %+v", n)
 		self.h.persistentNode(n, nil)
@@ -97,7 +93,7 @@ func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 	*latest = *leaf
 	adjustFather(latest)
 
-	logging.Infof("persistent %+v, %+v", latest.father, latest)
+	// logging.Infof("persistent %+v, %+v", latest.father, latest)
 
 	self.h.persistentNode(latest, nil)
 	self.h.persistentNode(latest.father, nil)
@@ -109,7 +105,7 @@ func (self *Radix) deleteNode(n *radNode) {
 		return
 	}
 
-	logging.Infof("deleteNode %+v, %+v", n, n.father)
+	// logging.Infof("deleteNode %+v, %+v", n, n.father)
 	//remove from storage
 	if len(n.Value) > 0 {
 		err := self.h.delFromStoragebyKey(n.Value)
@@ -119,9 +115,9 @@ func (self *Radix) deleteNode(n *radNode) {
 		n.Value = nil
 	}
 
-	logging.Info(n.Seq, n.father.Seq)
+	// logging.Info(n.Seq, n.father.Seq)
 	if len(n.Children) > 1 {
-		logging.Infof("persistent %+v", n)
+		// logging.Infof("persistent %+v", n)
 		err := self.h.persistentNode(n, nil)
 		if err != nil {
 			logging.Fatal(err)
@@ -163,10 +159,10 @@ func (self *Radix) deleteNode(n *radNode) {
 		n.father.Children = nil
 
 		if len(n.father.Value) == 0 {
-			logging.Info("recursive delete")
+			// logging.Info("recursive delete")
 			self.deleteNode(n.father) //recursive find & delete
 		} else {
-			logging.Infof("persistent %+v, %d", n.father, len(n.father.Value))
+			// logging.Infof("persistent %+v, %d", n.father, len(n.father.Value))
 			self.h.persistentNode(n.father, nil)
 		}
 	} else {
@@ -278,7 +274,6 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 		}
 		//adjust father
 		adjustFather(p)
-		tree.h.AddInMemoryNodeCount(1)
 
 		tree.h.persistentNode(p, nil)
 		n := &radNode{
@@ -287,7 +282,7 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 			father: d,
 			Seq:    tree.h.allocSeq(),
 		}
-		tree.h.AddInMemoryNodeCount(1)
+		tree.h.AddInMemoryNodeCount(2)
 
 		tree.h.persistentNode(n, Value)
 
@@ -404,7 +399,6 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 // 		}
 // 		//adjust father
 // 		adjustFather(p)
-// 		tree.h.AddInMemoryNodeCount(1)
 
 // 		tree.wg.Add(2)
 // 		tree.persistentCh <- persistentArg{n: p, value: nil}
@@ -415,7 +409,7 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 // 			father: d,
 // 			Seq:    tree.h.allocSeq(),
 // 		}
-// 		tree.h.AddInMemoryNodeCount(1)
+// 		tree.h.AddInMemoryNodeCount(2)
 
 // 		tree.persistentCh <- persistentArg{n: n, value: Value}
 
@@ -454,7 +448,7 @@ func (r *radNode) addToList(l *list.List, tree *Radix) {
 
 	// logging.Infof("checking %+v", r)
 	if len(r.Value) > 0 {
-		logging.Info("push", r.Value)
+		// logging.Info("push", r.Value)
 		l.PushBack(decodeValueToKey(string(r.Value)))
 	}
 	for _, d := range r.Children {
@@ -500,9 +494,9 @@ func save(l *list.List, limitCount int32, currentCount *int32, n *radNode, offse
 }
 
 func (r *radNode) match(delimiter []byte, limitCount int32, limitLevel int, currentCount *int32, tree *Radix, l *list.List) (goon bool) {
-	logging.Info("checking", r.Prefix, "delimiter", delimiter, "value", r.Value)
+	// logging.Info("checking", r.Prefix, "delimiter", delimiter, "value", r.Value)
 	if offset := bytes.Index(r.Prefix, delimiter); len(delimiter) > 0 && offset >= 0 {
-		logging.Info("delimiter", delimiter, "found")
+		// logging.Info("delimiter", delimiter, "found")
 		save(l, limitCount, currentCount, r, offset+1, RESULT_COMMON_PREFIX, true)
 		return false
 	}
@@ -518,7 +512,7 @@ func (r *radNode) match(delimiter []byte, limitCount int32, limitLevel int, curr
 }
 
 func (r *radNode) listByPrefixDelimiterMarker(skipRoot bool, delimiter []byte, limitCount int32, limitLevel int, currentCount *int32, tree *Radix, l *list.List) {
-	logging.Info("level", limitLevel)
+	// logging.Info("level", limitLevel)
 
 	tree.h.getChildrenByNode(r)
 
@@ -553,12 +547,12 @@ func (r *radNode) lookup(key []byte, tree *Radix) (*radNode, int, bool) {
 		return tree.Root, -1, false
 	}
 
-	logging.Infof("lookup %s, %+v", key, r)
+	// logging.Infof("lookup %s, %+v", key, r)
 
 	for i, d := range r.Children {
 		// tree.h.getChildrenByNode(d)
 
-		logging.Infof("lookup %s, %+v", key, d)
+		// logging.Infof("lookup %s, %+v", key, d)
 
 		comm := common(key, d.Prefix)
 		if len(comm) == 0 {
@@ -568,7 +562,7 @@ func (r *radNode) lookup(key []byte, tree *Radix) (*radNode, int, bool) {
 		// The key is found
 		if len(comm) == len(key) {
 			tree.h.getChildrenByNode(d)
-			logging.Infof("found %+v", d)
+			// logging.Infof("found %+v", d)
 			if len(comm) == len(d.Prefix) {
 				return d, i, true
 			}

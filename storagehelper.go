@@ -20,7 +20,7 @@ type helper struct {
 	store             Storage
 	inmemoryNodeCount int64
 	startSeq          int64
-	reqch             chan *request
+	reqch             chan request //create less object
 }
 
 type readResult struct {
@@ -30,11 +30,11 @@ type readResult struct {
 
 type request struct {
 	seq      int64
-	resultCh chan *readResult
+	resultCh chan readResult //create less object
 }
 
 func NewHelper(s Storage, startSeq int64) *helper {
-	h := &helper{store: s, startSeq: startSeq, reqch: make(chan *request, 1024)}
+	h := &helper{store: s, startSeq: startSeq, reqch: make(chan request, 1024)}
 	for i := 0; i < maxworker; i++ {
 		go h.work()
 	}
@@ -47,7 +47,7 @@ func (self *helper) work() {
 		n, err := self.readRadDiskNode(req.seq)
 		if err != nil {
 			logging.Fatalf("should never happend %+v", req)
-			req.resultCh <- &readResult{nil, err}
+			req.resultCh <- readResult{nil, err}
 			continue
 		}
 
@@ -56,7 +56,7 @@ func (self *helper) work() {
 			logging.Errorf("seq not match, expect %d got %d, %+v", req.seq, x.Seq, x)
 			panic("never happend")
 		}
-		req.resultCh <- &readResult{x, err}
+		req.resultCh <- readResult{x, err}
 	}
 }
 
@@ -67,19 +67,17 @@ func (self *helper) allocSeq() int64 {
 		logging.Fatal(err)
 	}
 
-	logging.Info("alloc seq", seq)
+	// logging.Info("alloc seq", seq)
 	return seq
 }
 
 func (self *helper) makeRadDiskNode(n *radNode) *radDiskNode {
-	//todo: clean up []byte<->string conversion
-	return &radDiskNode{Prefix: string(n.Prefix), Children: n.cloneChildrenSeq(), Value: string(n.Value), Version: n.Version,
+	return &radDiskNode{Prefix: n.Prefix, Children: n.cloneChildrenSeq(), Value: n.Value, Version: n.Version,
 		Seq: n.Seq}
 }
 
 func (self *helper) makeRadNode(x *radDiskNode) *radNode {
-	//todo: clean up []byte<->string conversion
-	return &radNode{Prefix: []byte(x.Prefix), Children: nil, Value: []byte(x.Value), Version: x.Version,
+	return &radNode{Prefix: x.Prefix, Children: nil, Value: x.Value, Version: x.Version,
 		Seq: x.Seq, Stat: statOnDisk}
 }
 
@@ -129,7 +127,7 @@ func (self *helper) delFromStoragebyKey(key []byte) error {
 }
 
 func (self *helper) AddInMemoryNodeCount(n int) {
-	logging.Info("AddInMemoryNodeCount", n)
+	// logging.Info("AddInMemoryNodeCount", n)
 	atomic.AddInt64(&self.inmemoryNodeCount, int64(n))
 }
 
@@ -184,7 +182,7 @@ func (self *helper) getNodeFromDisk(n *radNode) error {
 		}
 	}
 
-	logging.Infof("%+v", tmp)
+	// logging.Infof("%+v", tmp)
 	if len(tmp.Children) > 0 {
 		n.Children = make([]*radNode, len(tmp.Children), len(tmp.Children))
 		self.AddInMemoryNodeCount(len(n.Children))
@@ -210,11 +208,11 @@ func (self *helper) getNodeFromDisk(n *radNode) error {
 		return nil
 	}
 
-	resultCh := make(chan *readResult, len(tmp.Children))
+	resultCh := make(chan readResult, len(tmp.Children))
 
 	//send request
 	for _, seq := range tmp.Children {
-		self.reqch <- &request{seq: seq, resultCh: resultCh}
+		self.reqch <- request{seq: seq, resultCh: resultCh}
 	}
 
 	//read result
@@ -228,7 +226,7 @@ func (self *helper) getNodeFromDisk(n *radNode) error {
 		n.Children[i] = res.n
 	}
 
-	logging.Infof("load from disk %+v", n)
+	// logging.Infof("load from disk %+v", n)
 	return err
 }
 
