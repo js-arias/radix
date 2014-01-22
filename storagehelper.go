@@ -51,11 +51,7 @@ func (self *helper) work() {
 			continue
 		}
 
-		x := self.makeRadNode(n)
-		if x.Seq != req.seq { //check
-			logging.Errorf("seq not match, expect %d got %d, %+v", req.seq, x.Seq, x)
-			panic("never happend")
-		}
+		x := self.makeRadNode(n, req.seq)
 		req.resultCh <- readResult{x, err}
 	}
 }
@@ -72,19 +68,18 @@ func (self *helper) allocSeq() int64 {
 }
 
 func (self *helper) makeRadDiskNode(n *radNode) *radDiskNode {
-	return &radDiskNode{Prefix: n.Prefix, Children: n.cloneChildrenSeq(), Value: n.Value, Version: n.Version,
-		Seq: n.Seq}
+	return &radDiskNode{Prefix: n.Prefix, Children: n.cloneChildrenSeq(), Value: n.Value, Version: n.Version}
 }
 
-func (self *helper) makeRadNode(x *radDiskNode) *radNode {
-	return &radNode{Prefix: x.Prefix, Children: nil, Value: x.Value, Version: x.Version,
-		Seq: x.Seq, Stat: statOnDisk}
+func (self *helper) makeRadNode(x *radDiskNode, seq int64) *radNode {
+	return &radNode{Prefix: x.Prefix, Value: x.Value, Version: x.Version,
+		Seq: seq, Stat: statOnDisk}
 }
 
 func (self *helper) persistentNode(n *radNode, value []byte) error {
 	x := self.makeRadDiskNode(n)
 
-	seq := strconv.FormatInt(x.Seq, 10)
+	seq := strconv.FormatInt(n.Seq, 10)
 	buf, err := enc.Marshal(x) //Marshal(x)
 	if err != nil {
 		logging.Fatal(err)
@@ -196,12 +191,8 @@ func (self *helper) getNodeFromDisk(n *radNode) error {
 			if err != nil { //check
 				panic(err.Error())
 			}
-			if x.Seq != seq { //check
-				logging.Errorf("seq not match, expect %d got %d, %+v", seq, x.Seq, x)
-				panic("never happend")
-			}
 
-			node := self.makeRadNode(x)
+			node := self.makeRadNode(x, seq)
 			node.father = n
 			n.Children[i] = node
 		}
