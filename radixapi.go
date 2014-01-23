@@ -29,14 +29,6 @@ type Radix struct {
 
 	tick    *time.Ticker
 	closech chan bool
-
-	persistentCh chan persistentArg
-	wg           sync.WaitGroup
-}
-
-type persistentArg struct {
-	n     *radNode
-	value []byte
 }
 
 const (
@@ -72,10 +64,9 @@ func Open(path string) *Radix {
 	tree := &Radix{
 		Root: &radNode{
 			Seq: ROOT_SEQ, Stat: statOnDisk},
-		path:         filepath.Join(path, "/db"),
-		h:            NewHelper(&Levelstorage{}, ROOT_SEQ),
-		closech:      make(chan bool),
-		persistentCh: make(chan persistentArg, 5),
+		path:    filepath.Join(path, "/db"),
+		h:       NewHelper(&Levelstorage{}, ROOT_SEQ),
+		closech: make(chan bool),
 	}
 
 	tree.lock.Lock()
@@ -110,9 +101,6 @@ func Open(path string) *Radix {
 	tree.tick = time.NewTicker(10 * time.Second)
 
 	go tree.superVistor()
-	for i := 0; i < 5; i++ {
-		go tree.persistentWorker()
-	}
 
 	return tree
 }
@@ -149,13 +137,6 @@ func (self *Radix) superVistor() {
 	}
 }
 
-func (self *Radix) persistentWorker() {
-	for arg := range self.persistentCh {
-		self.h.persistentNode(arg.n, arg.value)
-		self.wg.Done()
-	}
-}
-
 func (self *Radix) addNodesCallBack() {
 	count := self.h.GetInMemoryNodeCount()
 
@@ -185,7 +166,6 @@ func (self *Radix) addNodesCallBack() {
 
 func (self *Radix) cleanup() error {
 	self.tick.Stop()
-	close(self.persistentCh)
 	close(self.closech)
 	self.h.ResetInMemoryNodeCount()
 	self.h.close()

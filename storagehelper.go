@@ -8,6 +8,7 @@ import (
 	enc "encoding/json"
 	"math/rand"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -21,6 +22,7 @@ type helper struct {
 	inmemoryNodeCount int64
 	startSeq          int64
 	reqch             chan request //create less object
+	persistentCh      chan persistentArg
 }
 
 type readResult struct {
@@ -33,10 +35,21 @@ type request struct {
 	resultCh chan readResult //create less object
 }
 
+type persistentArg struct {
+	n     *radNode
+	value []byte
+	wg    *sync.WaitGroup
+}
+
 func NewHelper(s Storage, startSeq int64) *helper {
-	h := &helper{store: s, startSeq: startSeq, reqch: make(chan request, 1024)}
+	h := &helper{store: s, startSeq: startSeq, reqch: make(chan request, 1024),
+		persistentCh: make(chan persistentArg, 5)}
 	for i := 0; i < maxworker; i++ {
 		go h.work()
+	}
+
+	for i := 0; i < 5; i++ {
+		go h.persistentWorker()
 	}
 
 	return h
@@ -56,6 +69,13 @@ func (self *helper) work() {
 	}
 }
 
+func (self *helper) persistentWorker() {
+	for arg := range self.persistentCh {
+		self.persistentNode(arg.n, arg.value)
+		arg.wg.Done()
+	}
+}
+
 func (self *helper) allocSeq() int64 {
 	seq := atomic.AddInt64(&self.startSeq, 1)
 	err := self.store.SaveLastSeq(seq)
@@ -72,8 +92,12 @@ func (self *helper) makeRadDiskNode(n *radNode) *radDiskNode {
 }
 
 func (self *helper) makeRadNode(x *radDiskNode, seq int64) *radNode {
+	stat := int64(statOnDisk)
+	if len(x.Children) == 0 {
+		stat = statInMemory
+	}
 	return &radNode{Prefix: x.Prefix, Value: x.Value, Version: x.Version,
-		Seq: seq, Stat: statOnDisk}
+		Seq: seq, Stat: stat}
 }
 
 func (self *helper) persistentNode(n *radNode, value []byte) error {
@@ -182,20 +206,6 @@ func (self *helper) getNodeFromDisk(n *radNode) error {
 		n.Children = make([]*radNode, len(tmp.Children), len(tmp.Children))
 		self.AddInMemoryNodeCount(len(n.Children))
 	} else {
-		return nil
-	}
-
-	if len(tmp.Children) == 1 { //concurrent can't help, less garbage
-		for i, seq := range tmp.Children {
-			x, err := self.readRadDiskNode(seq)
-			if err != nil { //check
-				panic(err.Error())
-			}
-
-			node := self.makeRadNode(x, seq)
-			node.father = n
-			n.Children[i] = node
-		}
 		return nil
 	}
 
@@ -318,4 +328,5 @@ func (self *helper) DumpMemNode(node *radNode, level int) error {
 
 func (self *helper) close() {
 	close(self.reqch)
+	close(self.persistentCh)
 }
