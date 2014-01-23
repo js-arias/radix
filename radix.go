@@ -213,7 +213,6 @@ func (r *radNode) delete(key []byte, tree *Radix) []byte {
 // 					d.Value = internalKey
 // 					tree.h.getChildrenByNode(d)
 // 					tree.h.persistentNode(d, Value) //todo: children seq not changed
-// 					// tree.h.persistentNode(d.father, nil)
 // 					return nil, nil
 // 				}
 
@@ -226,7 +225,6 @@ func (r *radNode) delete(key []byte, tree *Radix) []byte {
 // 					d.Version++
 // 					tree.h.getChildrenByNode(d)
 // 					tree.h.persistentNode(d, Value) //todo: children seq not changed
-// 					// tree.h.persistentNode(d.father, nil)
 // 					return orgValue, nil
 // 				}
 
@@ -251,10 +249,9 @@ func (r *radNode) delete(key []byte, tree *Radix) []byte {
 
 // 			d.Children = make([]*radNode, 1, 1)
 // 			d.Children[0] = n
-// 			d.Prefix = comm //todo: no need to clone, we can reuse comm
+// 			d.Prefix = comm //no need to clone, we can reuse comm
 // 			d.Value = internalKey
 // 			tree.h.persistentNode(d, Value)
-// 			// tree.h.persistentNode(d.father, nil)
 // 			return nil, nil
 // 		}
 
@@ -294,7 +291,6 @@ func (r *radNode) delete(key []byte, tree *Radix) []byte {
 // 		d.Children[1] = n
 
 // 		tree.h.persistentNode(d, nil)
-// 		// tree.h.persistentNode(d.father, nil)
 // 		return nil, nil
 // 	}
 
@@ -335,7 +331,6 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 					d.Value = internalKey
 					tree.h.getChildrenByNode(d)
 					tree.h.persistentNode(d, Value) //todo: children seq not changed
-					// tree.h.persistentNode(d.father, nil)
 					return nil, nil
 				}
 
@@ -348,7 +343,6 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 					d.Version++
 					tree.h.getChildrenByNode(d)
 					tree.h.persistentNode(d, Value) //todo: children seq not changed
-					// tree.h.persistentNode(d.father, nil)
 					return orgValue, nil
 				}
 
@@ -376,11 +370,10 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 
 			d.Children = make([]*radNode, 1, 1)
 			d.Children[0] = n
-			d.Prefix = comm //todo: no need to clone, we can reuse comm
+			d.Prefix = comm //no need to clone, we can reuse comm
 			d.Value = internalKey
 			tree.h.persistentNode(d, Value)
 			wg.Wait()
-			// tree.h.persistentNode(d.father, nil)
 			return nil, nil
 		}
 
@@ -424,7 +417,6 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 
 		tree.h.persistentNode(d, nil)
 		wg.Wait()
-		// tree.h.persistentNode(d.father, nil)
 		return nil, nil
 	}
 
