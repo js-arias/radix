@@ -366,7 +366,7 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 
 			wg := sync.WaitGroup{}
 			wg.Add(1)
-			tree.h.asyncPersistent(persistentArg{n: n, value: nil, wg: &wg})
+			tree.h.asyncPersistent(&persistentArg{n: n, value: nil, wg: &wg})
 
 			d.Children = make([]*radNode, 1, 1)
 			d.Children[0] = n
@@ -397,7 +397,7 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 
 		wg := sync.WaitGroup{}
 		wg.Add(2)
-		tree.h.asyncPersistent(persistentArg{n: p, value: nil, wg: &wg})
+		tree.h.asyncPersistent(&persistentArg{n: p, value: nil, wg: &wg})
 
 		n := &radNode{
 			Prefix: cloneByteSlice(key[len(comm):]),
@@ -407,7 +407,7 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 		}
 		tree.h.AddInMemoryNodeCount(2)
 
-		tree.h.asyncPersistent(persistentArg{n: n, value: Value, wg: &wg})
+		tree.h.asyncPersistent(&persistentArg{n: n, value: Value, wg: &wg})
 
 		d.Prefix = comm //no need to clone, we can reuse comm
 		d.Value = nil
@@ -430,7 +430,7 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-	tree.h.asyncPersistent(persistentArg{n: n, value: Value, wg: &wg})
+	tree.h.asyncPersistent(&persistentArg{n: n, value: Value, wg: &wg})
 
 	r.Children = append(r.Children, n)
 	tree.h.persistentNode(r, nil)
@@ -679,7 +679,7 @@ func randomCut(n *radNode, tree *Radix, level int) (retry bool) {
 func doRandomCut(n *radNode, tree *Radix) int {
 	befortCut := tree.h.GetInMemoryNodeCount()
 	for i := 0; i < 5; i++ { //max try
-		if retry := randomCut(n, tree, 4); !retry {
+		if retry := randomCut(n, tree, 3); !retry {
 			break
 		}
 		logging.Debug("retry")

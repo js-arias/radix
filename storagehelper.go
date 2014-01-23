@@ -22,7 +22,7 @@ type helper struct {
 	inmemoryNodeCount int64
 	startSeq          int64
 	reqch             chan request //create less object
-	persistentCh      chan persistentArg
+	persistentCh      chan *persistentArg
 }
 
 type readResult struct {
@@ -43,7 +43,7 @@ type persistentArg struct {
 
 func NewHelper(s Storage, startSeq int64) *helper {
 	h := &helper{store: s, startSeq: startSeq, reqch: make(chan request, 1024),
-		persistentCh: make(chan persistentArg, 5)}
+		persistentCh: make(chan *persistentArg, 5)}
 	for i := 0; i < maxworker; i++ {
 		go h.work()
 	}
@@ -263,7 +263,7 @@ func (self *helper) getChildrenByNode(n *radNode) error {
 	}
 }
 
-func (self *helper) asyncPersistent(arg persistentArg) {
+func (self *helper) asyncPersistent(arg *persistentArg) {
 	self.persistentCh <- arg
 }
 
