@@ -263,17 +263,8 @@ func (self *helper) getChildrenByNode(n *radNode) error {
 	}
 }
 
-func (r *radNode) cloneChildrenSeq() []int64 {
-	if len(r.Children) == 0 {
-		return nil
-	}
-
-	nodes := make([]int64, len(r.Children), len(r.Children))
-	for i, d := range r.Children {
-		nodes[i] = d.Seq
-	}
-
-	return nodes
+func (self *helper) asyncPersistent(arg persistentArg) {
+	self.persistentCh <- arg
 }
 
 func (self *helper) DumpNode(node *radNode, level int) error {

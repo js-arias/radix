@@ -366,7 +366,7 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 
 			wg := sync.WaitGroup{}
 			wg.Add(1)
-			tree.h.persistentCh <- persistentArg{n: n, value: nil, wg: &wg}
+			tree.h.asyncPersistent(persistentArg{n: n, value: nil, wg: &wg})
 
 			d.Children = make([]*radNode, 1, 1)
 			d.Children[0] = n
@@ -397,7 +397,7 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 
 		wg := sync.WaitGroup{}
 		wg.Add(2)
-		tree.h.persistentCh <- persistentArg{n: p, value: nil, wg: &wg}
+		tree.h.asyncPersistent(persistentArg{n: p, value: nil, wg: &wg})
 
 		n := &radNode{
 			Prefix: cloneByteSlice(key[len(comm):]),
@@ -407,7 +407,7 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 		}
 		tree.h.AddInMemoryNodeCount(2)
 
-		tree.h.persistentCh <- persistentArg{n: n, value: Value, wg: &wg}
+		tree.h.asyncPersistent(persistentArg{n: n, value: Value, wg: &wg})
 
 		d.Prefix = comm //no need to clone, we can reuse comm
 		d.Value = nil
@@ -430,7 +430,7 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-	tree.h.persistentCh <- persistentArg{n: n, value: Value, wg: &wg}
+	tree.h.asyncPersistent(persistentArg{n: n, value: Value, wg: &wg})
 
 	r.Children = append(r.Children, n)
 	tree.h.persistentNode(r, nil)
@@ -535,6 +535,19 @@ func (r *radNode) listByPrefixDelimiterMarker(skipRoot bool, delimiter []byte, l
 	}
 }
 
+func (r *radNode) cloneChildrenSeq() []int64 {
+	if len(r.Children) == 0 {
+		return nil
+	}
+
+	nodes := make([]int64, len(r.Children), len(r.Children))
+	for i, d := range r.Children {
+		nodes[i] = d.Seq
+	}
+
+	return nodes
+}
+
 // implementats lookup: node, index, exist
 func (r *radNode) lookup(key []byte, tree *Radix) (*radNode, int, bool) {
 	tree.h.getChildrenByNode(r)
@@ -598,27 +611,56 @@ func cutAll(n *radNode, tree *Radix) int {
 	return cnt
 }
 
-func randomCut(n *radNode, tree *Radix) (retry bool) {
+// func randomCut(n *radNode, tree *Radix) (retry bool) {
+// 	target := rand.Intn(len(n.Children))
+
+// 	if onDisk(n.Children[target]) || len(n.Children[target].Children) == 0 {
+// 		return true
+// 	}
+
+// 	// sum := 0
+// 	// for _, c := range n.Children {
+// 	// 	childrenCnt := 0
+// 	// 	getInMemChildrenCount(c, &childrenCnt)
+// 	// 	logging.Debugf("prefix %s, children count %d", c.Prefix, childrenCnt)
+// 	// 	sum += childrenCnt
+// 	// }
+
+// 	// //check status
+// 	// if int64(sum) != tree.h.GetInMemoryNodeCount() {
+// 	// 	// tree.h.DumpMemNode(tree.Root, 0)
+// 	// 	logging.Errorf("sum: %d, max: %d, InMemoryNodeCount %d", sum, tree.MaxInMemoryNodeCount, tree.h.GetInMemoryNodeCount())
+// 	// 	panic("")
+// 	// }
+
+// 	//get children count
+// 	childrenCnt := 0
+// 	getInMemChildrenCount(n.Children[target], &childrenCnt)
+// 	if childrenCnt > 1 {
+// 		logging.Debugf("inmemory: %d, cut prefix %s, childrenCnt %d, father children count %d", tree.h.GetInMemoryNodeCount(),
+// 			n.Children[target].Prefix, childrenCnt, len(n.Children))
+// 		setOnDisk(n.Children[target])
+// 		tree.h.AddInMemoryNodeCount(-childrenCnt + 1) //exclude root node
+// 		return false
+// 	}
+
+// 	return true
+// }
+
+func randomCut(n *radNode, tree *Radix, level int) (retry bool) {
 	target := rand.Intn(len(n.Children))
 
 	if onDisk(n.Children[target]) || len(n.Children[target].Children) == 0 {
 		return true
 	}
 
-	// sum := 0
-	// for _, c := range n.Children {
-	// 	childrenCnt := 0
-	// 	getInMemChildrenCount(c, &childrenCnt)
-	// 	logging.Debugf("prefix %s, children count %d", c.Prefix, childrenCnt)
-	// 	sum += childrenCnt
-	// }
+	if len(n.Children[target].Children) == 1 {
+		return randomCut(n.Children[target], tree, level) //go deeper
+	}
 
-	// //check status
-	// if int64(sum) != tree.h.GetInMemoryNodeCount() {
-	// 	// tree.h.DumpMemNode(tree.Root, 0)
-	// 	logging.Errorf("sum: %d, max: %d, InMemoryNodeCount %d", sum, tree.MaxInMemoryNodeCount, tree.h.GetInMemoryNodeCount())
-	// 	panic("")
-	// }
+	if level > 0 {
+		return randomCut(n.Children[target], tree, level-1)
+	}
 
 	//get children count
 	childrenCnt := 0
@@ -637,7 +679,7 @@ func randomCut(n *radNode, tree *Radix) (retry bool) {
 func doRandomCut(n *radNode, tree *Radix) int {
 	befortCut := tree.h.GetInMemoryNodeCount()
 	for i := 0; i < 5; i++ { //max try
-		if retry := randomCut(n, tree); !retry {
+		if retry := randomCut(n, tree, 4); !retry {
 			break
 		}
 		logging.Debug("retry")
