@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	maxworker = 5
+	maxworker = 200
 )
 
 type helper struct {
@@ -43,12 +43,12 @@ type persistentArg struct {
 
 func NewHelper(s Storage, startSeq int64) *helper {
 	h := &helper{store: s, startSeq: startSeq, reqch: make(chan request, 1024),
-		persistentCh: make(chan *persistentArg, 5)}
+		persistentCh: make(chan *persistentArg, 3)}
 	for i := 0; i < maxworker; i++ {
 		go h.work()
 	}
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 3; i++ {
 		go h.persistentWorker()
 	}
 
