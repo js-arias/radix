@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const COUNT = 5000000
+const COUNT = 500000
 
 func TestCommon(t *testing.T) {
 

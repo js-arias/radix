@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	maxworker = 20
+	maxworker = 5
 )
 
 type helper struct {

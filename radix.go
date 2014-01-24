@@ -687,6 +687,10 @@ func doRandomCut(n *radNode, tree *Radix) int {
 		level = 1
 	}
 
+	if befortCut > 5*tree.MaxInMemoryNodeCount {
+		level = 0
+	}
+
 	for i := 0; i < 5; i++ { //max try
 		if retry := randomCut(n, tree, level); !retry {
 			break
