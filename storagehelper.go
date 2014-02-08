@@ -88,7 +88,7 @@ func (self *helper) allocSeq() int64 {
 }
 
 func (self *helper) makeRadDiskNode(n *radNode) *radDiskNode {
-	return &radDiskNode{Prefix: n.Prefix, Children: n.cloneChildrenSeq(), Value: n.Value, Version: n.Version}
+	return &radDiskNode{Prefix: string(n.Prefix), Children: n.cloneChildrenSeq(), Value: string(n.Value), Version: n.Version}
 }
 
 func (self *helper) makeRadNode(x *radDiskNode, seq int64) *radNode {
@@ -96,7 +96,7 @@ func (self *helper) makeRadNode(x *radDiskNode, seq int64) *radNode {
 	if len(x.Children) == 0 {
 		stat = statInMemory
 	}
-	return &radNode{Prefix: x.Prefix, Value: x.Value, Version: x.Version,
+	return &radNode{Prefix: cloneString2Bytes(x.Prefix), Value: cloneString2Bytes(x.Value), Version: x.Version,
 		Seq: seq, Stat: stat}
 }
 
@@ -172,7 +172,7 @@ func (self *helper) readRadDiskNode(seq int64) (*radDiskNode, error) {
 	// logging.Debug(seq, string(buf))
 
 	if buf == nil { //when database is empty
-		return nil, fmt.Errorf("get key %d failed", seq)
+		return nil, fmt.Errorf("get key %d failed, is database empty?", seq)
 	}
 
 	var x radDiskNode

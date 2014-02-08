@@ -256,7 +256,7 @@ func (r *radNode) classicPut(key []byte, Value []byte, internalKey []byte, versi
 
 			d.Children = make([]*radNode, 1, 1)
 			d.Children[0] = n
-			d.Prefix = comm //no need to clone, we can reuse comm
+			d.Prefix = []byte(comm) //no need to clone, we can reuse comm
 			d.Value = internalKey
 			tree.h.persistentNode(d, Value)
 			return nil, nil
@@ -291,7 +291,7 @@ func (r *radNode) classicPut(key []byte, Value []byte, internalKey []byte, versi
 
 		tree.h.persistentNode(n, Value)
 
-		d.Prefix = comm //no need to clone, we can reuse comm
+		d.Prefix = []byte(comm) //no need to clone, we can reuse comm
 		d.Value = nil
 		d.Children = make([]*radNode, 2, 2)
 		d.Children[0] = p
@@ -383,7 +383,7 @@ func (r *radNode) combinePut(key []byte, Value []byte, internalKey []byte, versi
 
 			d.Children = make([]*radNode, 1, 1)
 			d.Children[0] = n
-			d.Prefix = comm //no need to clone, we can reuse comm
+			d.Prefix = []byte(comm) //no need to clone, we can reuse comm
 			d.Value = internalKey
 			tree.h.persistentNode(d, Value)
 			tree.h.AddInMemoryNodeCount(1)
@@ -423,7 +423,7 @@ func (r *radNode) combinePut(key []byte, Value []byte, internalKey []byte, versi
 		//adjust father, move to here to make it faster
 		adjustFather(p)
 
-		d.Prefix = comm //no need to clone, we can reuse comm
+		d.Prefix = []byte(comm) //no need to clone, we can reuse comm
 		d.Value = nil
 		d.Children = make([]*radNode, 2, 2)
 		d.Children[0] = p
@@ -514,7 +514,7 @@ func (r *radNode) concurrentPut(key []byte, Value []byte, internalKey []byte, ve
 
 			d.Children = make([]*radNode, 1, 1)
 			d.Children[0] = n
-			d.Prefix = comm //no need to clone, we can reuse comm
+			d.Prefix = []byte(comm) //no need to clone, we can reuse comm
 			d.Value = internalKey
 			tree.h.persistentNode(d, Value)
 			tree.h.AddInMemoryNodeCount(1)
@@ -554,7 +554,7 @@ func (r *radNode) concurrentPut(key []byte, Value []byte, internalKey []byte, ve
 		//adjust father
 		adjustFather(p)
 
-		d.Prefix = comm //no need to clone, we can reuse comm
+		d.Prefix = []byte(comm) //no need to clone, we can reuse comm
 		d.Value = nil
 		d.Children = make([]*radNode, 2, 2)
 		d.Children[0] = p
