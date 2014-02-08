@@ -406,8 +406,6 @@ func (r *radNode) combinePut(key []byte, Value []byte, internalKey []byte, versi
 			Children: d.Children,
 			Seq:      tree.h.allocSeq(),
 		}
-		//adjust father
-		adjustFather(p)
 
 		wg := sync.WaitGroup{}
 		wg.Add(2)
@@ -421,6 +419,9 @@ func (r *radNode) combinePut(key []byte, Value []byte, internalKey []byte, versi
 		}
 
 		tree.h.asyncPersistent(&persistentArg{n: n, value: Value, wg: &wg})
+
+		//adjust father, move to here to make it faster
+		adjustFather(p)
 
 		d.Prefix = comm //no need to clone, we can reuse comm
 		d.Value = nil
@@ -502,13 +503,14 @@ func (r *radNode) concurrentPut(key []byte, Value []byte, internalKey []byte, ve
 				Children: d.Children,
 				Seq:      tree.h.allocSeq(),
 			}
-			//adjust father
-			adjustFather(n)
 
 			wg := sync.WaitGroup{} //todo: using len(key) && len(children) to decide either using single thread or multithread
 			wg.Add(1)
 			tree.h.asyncPersistent(&persistentArg{n: n, value: nil, wg: &wg})
 			// tree.h.persistentNode(n, nil)
+
+			//adjust father
+			adjustFather(n)
 
 			d.Children = make([]*radNode, 1, 1)
 			d.Children[0] = n
@@ -535,8 +537,6 @@ func (r *radNode) concurrentPut(key []byte, Value []byte, internalKey []byte, ve
 			Children: d.Children,
 			Seq:      tree.h.allocSeq(),
 		}
-		//adjust father
-		adjustFather(p)
 
 		wg := sync.WaitGroup{}
 		wg.Add(2)
@@ -550,6 +550,9 @@ func (r *radNode) concurrentPut(key []byte, Value []byte, internalKey []byte, ve
 		}
 
 		tree.h.asyncPersistent(&persistentArg{n: n, value: Value, wg: &wg})
+
+		//adjust father
+		adjustFather(p)
 
 		d.Prefix = comm //no need to clone, we can reuse comm
 		d.Value = nil
@@ -848,7 +851,7 @@ func doRandomCut(n *radNode, tree *Radix) int {
 
 //remove this tree's children from memory, only cut leaf node
 func cutEdge(n *radNode, tree *Radix) int {
-	if n == nil || onDisk(n) || len(n.Children) == 0 { //todo: handle only one child
+	if n == nil || onDisk(n) || len(n.Children) == 0 {
 		return 0
 	}
 
