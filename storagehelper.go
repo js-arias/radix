@@ -96,7 +96,8 @@ func (self *helper) makeRadNode(x *radDiskNode, seq int64) *radNode {
 	if len(x.Children) == 0 {
 		stat = statInMemory
 	}
-	return &radNode{Prefix: cloneString2Bytes(x.Prefix), Value: cloneString2Bytes(x.Value), Version: x.Version,
+
+	return &radNode{Prefix: []byte(x.Prefix), Value: []byte(x.Value), Version: x.Version,
 		Seq: seq, Stat: stat}
 }
 

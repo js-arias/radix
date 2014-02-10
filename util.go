@@ -240,9 +240,3 @@ func cloneByteSlice(b []byte) []byte {
 	copy(s, b)
 	return s
 }
-
-func cloneString2Bytes(s string) []byte {
-	b := make([]byte, len(s))
-	copy(b, s)
-	return b
-}
