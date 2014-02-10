@@ -32,7 +32,7 @@ type readResult struct {
 
 type request struct {
 	seq      int64
-	resultCh chan readResult //create less object
+	resultCh chan *readResult //create less object
 }
 
 type persistentArg struct {
@@ -60,12 +60,12 @@ func (self *helper) work() {
 		n, err := self.readRadDiskNode(req.seq)
 		if err != nil {
 			logging.Fatalf("should never happend %+v", req)
-			req.resultCh <- readResult{nil, err}
+			req.resultCh <- &readResult{nil, err}
 			continue
 		}
 
 		x := self.makeRadNode(n, req.seq)
-		req.resultCh <- readResult{x, err}
+		req.resultCh <- &readResult{x, err}
 	}
 }
 
@@ -105,7 +105,7 @@ func (self *helper) persistentNode(n *radNode, value []byte) error {
 	x := self.makeRadDiskNode(n)
 
 	seq := strconv.FormatInt(n.Seq, 10)
-	buf, err := enc.Marshal(x) //Marshal(x)
+	buf, err := enc.Marshal(x)
 	if err != nil {
 		logging.Fatal(err)
 		return err
@@ -147,7 +147,6 @@ func (self *helper) delFromStoragebyKey(key []byte) error {
 }
 
 func (self *helper) AddInMemoryNodeCount(n int) {
-	// logging.Info("AddInMemoryNodeCount", n)
 	atomic.AddInt64(&self.inmemoryNodeCount, int64(n))
 }
 
@@ -177,7 +176,7 @@ func (self *helper) readRadDiskNode(seq int64) (*radDiskNode, error) {
 	}
 
 	var x radDiskNode
-	err = enc.Unmarshal(buf, &x) //Unmarshal(buf, &x)
+	err = enc.Unmarshal(buf, &x)
 	if err != nil {
 		logging.Fatal(err)
 		return nil, err
@@ -205,17 +204,18 @@ func (self *helper) getNodeFromDisk(n *radNode) error {
 	// logging.Infof("%+v", tmp)
 	if len(tmp.Children) > 0 {
 		n.Children = make([]*radNode, len(tmp.Children), len(tmp.Children))
-		self.AddInMemoryNodeCount(len(n.Children))
 	} else {
 		return nil
 	}
 
-	resultCh := make(chan readResult, len(tmp.Children))
+	resultCh := make(chan *readResult, len(tmp.Children))
 
 	//send request
 	for _, seq := range tmp.Children {
 		self.reqch <- request{seq: seq, resultCh: resultCh}
 	}
+
+	self.AddInMemoryNodeCount(len(n.Children))
 
 	//read result
 	for i, _ := range tmp.Children {
