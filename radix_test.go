@@ -1577,28 +1577,11 @@ func TestBackup(t *testing.T) {
 
 	goroutineCount := 5
 
+	log.Println("start backup")
 	ch := r.Backup("bakdb")
+	log.Println("backuping...")
 
 	wg := sync.WaitGroup{}
-	wg.Add(goroutineCount)
-	f := func(start, end int) {
-		log.Println("start-end", start, end)
-		for i := start; i < end; i++ {
-			str := fmt.Sprintf("%d", i)
-			buf, version := r.GetWithVersion(str)
-			if version != 0 || string(buf) != str {
-				t.FailNow()
-			}
-		}
-		log.Println("read done")
-		wg.Done()
-	}
-
-	for i := 0; i < goroutineCount; i++ {
-		go f(i*count/goroutineCount, (i+1)*count/goroutineCount)
-	}
-
-	wg.Wait()
 
 	wg.Add(goroutineCount)
 
@@ -1637,7 +1620,10 @@ func TestBackup(t *testing.T) {
 		}
 	}
 
-	<-ch
+	err := <-ch
+	if err != nil {
+		t.Error(err)
+	}
 }
 
 func TestConcurrentRandomReadWrite(t *testing.T) {
