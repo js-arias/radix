@@ -80,7 +80,7 @@ func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
 		return
 	}
 
-	self.h.getChildrenByNode(leaf) //we need to copy child if leaf is on disk
+	self.h.getChildrenByNode(leaf, self.snapshot) //we need to copy child if leaf is on disk
 
 	err := self.h.delNodeFromStorage(leaf.Seq) //no need to dec inmemory node count, because we reuse it
 	if err != nil {
@@ -174,7 +174,7 @@ func (self *Radix) deleteNode(n *radNode) {
 // implements delete
 func (r *radNode) delete(key []byte, tree *Radix) []byte {
 	if x, _, ok := r.lookup(key, tree); ok && len(x.Value) > 0 {
-		v, err := tree.h.GetValueFromStore(x.Value)
+		v, err := tree.h.GetValueFromStore(x.Value, tree.snapshot)
 		if err != nil {
 			logging.Fatal("never happend")
 		}
@@ -201,7 +201,7 @@ func (r *radNode) put(key []byte, Value []byte, internalKey []byte, version int6
 func (r *radNode) classicPut(key []byte, Value []byte, internalKey []byte, version int64, force bool, tree *Radix) ([]byte, error) {
 	//logging.Info("insert", internalKey, "--", string(Value), r.Prefix)
 
-	tree.h.getChildrenByNode(r)
+	tree.h.getChildrenByNode(r, tree.snapshot)
 
 	for _, d := range r.Children {
 		// tree.h.getChildrenByNode(d)
@@ -218,19 +218,19 @@ func (r *radNode) classicPut(key []byte, Value []byte, internalKey []byte, versi
 			if len(comm) == len(d.Prefix) {
 				if len(d.Value) == 0 {
 					d.Value = internalKey
-					tree.h.getChildrenByNode(d)
+					tree.h.getChildrenByNode(d, tree.snapshot)
 					tree.h.persistentNode(d, Value) //todo: children seq not changed
 					return nil, nil
 				}
 
 				if force || version == d.Version {
 					d.Value = internalKey
-					orgValue, err := tree.h.GetValueFromStore(d.Value)
+					orgValue, err := tree.h.GetValueFromStore(d.Value, tree.snapshot)
 					if err != nil {
 						logging.Fatal(err)
 					}
 					d.Version++
-					tree.h.getChildrenByNode(d)
+					tree.h.getChildrenByNode(d, tree.snapshot)
 					tree.h.persistentNode(d, Value) //todo: children seq not changed
 					return orgValue, nil
 				}
@@ -239,7 +239,7 @@ func (r *radNode) classicPut(key []byte, Value []byte, internalKey []byte, versi
 				return nil, fmt.Errorf("key: %s, version not match, version is %d, but you provide %d, %+v", internalKey, d.Version, version, d)
 			}
 
-			tree.h.getChildrenByNode(d)
+			tree.h.getChildrenByNode(d, tree.snapshot)
 
 			//ex: ab, insert a
 			n := &radNode{
@@ -267,7 +267,7 @@ func (r *radNode) classicPut(key []byte, Value []byte, internalKey []byte, versi
 			return d.put(key[len(comm):], Value, internalKey, version, force, tree)
 		}
 
-		tree.h.getChildrenByNode(d)
+		tree.h.getChildrenByNode(d, tree.snapshot)
 
 		//ex: ab, insert ac, extra common a
 		p := &radNode{
@@ -328,7 +328,7 @@ func needConcurrent(n *radNode) bool {
 func (r *radNode) combinePut(key []byte, Value []byte, internalKey []byte, version int64, force bool, tree *Radix) ([]byte, error) {
 	// logging.Info("insert", internalKey, "--", string(Value), r.Prefix)
 
-	tree.h.getChildrenByNode(r)
+	tree.h.getChildrenByNode(r, tree.snapshot)
 
 	for _, d := range r.Children {
 		// tree.h.getChildrenByNode(d)
@@ -345,19 +345,19 @@ func (r *radNode) combinePut(key []byte, Value []byte, internalKey []byte, versi
 			if len(comm) == len(d.Prefix) {
 				if len(d.Value) == 0 {
 					d.Value = internalKey
-					tree.h.getChildrenByNode(d)
+					tree.h.getChildrenByNode(d, tree.snapshot)
 					tree.h.persistentNode(d, Value) //todo: children seq not changed
 					return nil, nil
 				}
 
 				if force || version == d.Version {
 					d.Value = internalKey
-					orgValue, err := tree.h.GetValueFromStore(d.Value)
+					orgValue, err := tree.h.GetValueFromStore(d.Value, tree.snapshot)
 					if err != nil {
 						logging.Fatal(err)
 					}
 					d.Version++
-					tree.h.getChildrenByNode(d)
+					tree.h.getChildrenByNode(d, tree.snapshot)
 					tree.h.persistentNode(d, Value) //todo: children seq not changed
 					return orgValue, nil
 				}
@@ -366,7 +366,7 @@ func (r *radNode) combinePut(key []byte, Value []byte, internalKey []byte, versi
 				return nil, fmt.Errorf("key: %s, version not match, version is %d, but you provide %d, %+v", internalKey, d.Version, version, d)
 			}
 
-			tree.h.getChildrenByNode(d)
+			tree.h.getChildrenByNode(d, tree.snapshot)
 
 			//ex: ab, insert a
 			n := &radNode{
@@ -396,7 +396,7 @@ func (r *radNode) combinePut(key []byte, Value []byte, internalKey []byte, versi
 			return d.put(key[len(comm):], Value, internalKey, version, force, tree)
 		}
 
-		tree.h.getChildrenByNode(d)
+		tree.h.getChildrenByNode(d, tree.snapshot)
 
 		//ex: ab, insert ac, extra common a
 		p := &radNode{
@@ -455,7 +455,7 @@ func (r *radNode) combinePut(key []byte, Value []byte, internalKey []byte, versi
 func (r *radNode) concurrentPut(key []byte, Value []byte, internalKey []byte, version int64, force bool, tree *Radix) ([]byte, error) {
 	// logging.Info("insert", internalKey, "--", string(Value), r.Prefix)
 
-	tree.h.getChildrenByNode(r)
+	tree.h.getChildrenByNode(r, tree.snapshot)
 
 	for _, d := range r.Children {
 		// tree.h.getChildrenByNode(d)
@@ -472,19 +472,19 @@ func (r *radNode) concurrentPut(key []byte, Value []byte, internalKey []byte, ve
 			if len(comm) == len(d.Prefix) {
 				if len(d.Value) == 0 {
 					d.Value = internalKey
-					tree.h.getChildrenByNode(d)
+					tree.h.getChildrenByNode(d, tree.snapshot)
 					tree.h.persistentNode(d, Value) //todo: children seq not changed
 					return nil, nil
 				}
 
 				if force || version == d.Version {
 					d.Value = internalKey
-					orgValue, err := tree.h.GetValueFromStore(d.Value)
+					orgValue, err := tree.h.GetValueFromStore(d.Value, tree.snapshot)
 					if err != nil {
 						logging.Fatal(err)
 					}
 					d.Version++
-					tree.h.getChildrenByNode(d)
+					tree.h.getChildrenByNode(d, tree.snapshot)
 					tree.h.persistentNode(d, Value) //todo: children seq not changed
 					return orgValue, nil
 				}
@@ -493,7 +493,7 @@ func (r *radNode) concurrentPut(key []byte, Value []byte, internalKey []byte, ve
 				return nil, fmt.Errorf("key: %s, version not match, version is %d, but you provide %d, %+v", internalKey, d.Version, version, d)
 			}
 
-			tree.h.getChildrenByNode(d)
+			tree.h.getChildrenByNode(d, tree.snapshot)
 
 			//ex: ab, insert a
 			n := &radNode{
@@ -527,7 +527,7 @@ func (r *radNode) concurrentPut(key []byte, Value []byte, internalKey []byte, ve
 			return d.put(key[len(comm):], Value, internalKey, version, force, tree)
 		}
 
-		tree.h.getChildrenByNode(d)
+		tree.h.getChildrenByNode(d, tree.snapshot)
 
 		//ex: ab, insert ac, extra common a
 		p := &radNode{
@@ -587,7 +587,7 @@ func (r *radNode) concurrentPut(key []byte, Value []byte, internalKey []byte, ve
 }
 
 func (r *radNode) addToList(l *list.List, tree *Radix) {
-	tree.h.getChildrenByNode(r)
+	tree.h.getChildrenByNode(r, tree.snapshot)
 
 	// logging.Infof("checking %+v", r)
 	if len(r.Value) > 0 {
@@ -657,7 +657,7 @@ func (r *radNode) match(delimiter []byte, limitCount int32, limitLevel int, curr
 func (r *radNode) listByPrefixDelimiterMarker(skipRoot bool, delimiter []byte, limitCount int32, limitLevel int, currentCount *int32, tree *Radix, l *list.List) {
 	// logging.Info("level", limitLevel)
 
-	tree.h.getChildrenByNode(r)
+	tree.h.getChildrenByNode(r, tree.snapshot)
 
 	//search root first
 	if !skipRoot {
@@ -669,7 +669,7 @@ func (r *radNode) listByPrefixDelimiterMarker(skipRoot bool, delimiter []byte, l
 
 	for _, d := range r.Children {
 		//leaf or prefix include delimiter
-		tree.h.getChildrenByNode(d)
+		tree.h.getChildrenByNode(d, tree.snapshot)
 
 		goon := d.match(delimiter, limitCount, limitLevel, currentCount, tree, l)
 		if !goon {
@@ -697,7 +697,7 @@ func (r *radNode) cloneChildrenSeq() []int64 {
 
 // implementats lookup: node, index, exist
 func (r *radNode) lookup(key []byte, tree *Radix) (*radNode, int, bool) {
-	tree.h.getChildrenByNode(r)
+	tree.h.getChildrenByNode(r, tree.snapshot)
 
 	if len(key) == 0 {
 		return tree.Root, -1, false
@@ -717,7 +717,7 @@ func (r *radNode) lookup(key []byte, tree *Radix) (*radNode, int, bool) {
 
 		// The key is found
 		if len(comm) == len(key) {
-			tree.h.getChildrenByNode(d)
+			tree.h.getChildrenByNode(d, tree.snapshot)
 			// logging.Infof("found %+v", d)
 			if len(comm) == len(d.Prefix) {
 				return d, i, true

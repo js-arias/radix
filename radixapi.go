@@ -29,6 +29,8 @@ type Radix struct {
 
 	tick    *time.Ticker
 	closech chan bool
+
+	snapshot interface{}
 }
 
 const (
@@ -80,7 +82,7 @@ func Open(path string) *Radix {
 
 	tree.beginWriteBatch()
 
-	if err := tree.h.getChildrenByNode(tree.Root); err != nil {
+	if err := tree.h.getChildrenByNode(tree.Root, tree.snapshot); err != nil {
 		// logging.Info(err)
 		tree.h.persistentNode(tree.Root, nil)
 		tree.commitWriteBatch()
@@ -89,7 +91,7 @@ func Open(path string) *Radix {
 		tree.rollback()
 		tree.Root.Stat = statInMemory
 		logging.Debugf("root: %+v, last seq %d", tree.Root, tree.h.startSeq)
-		tree.h.startSeq, err = tree.h.store.GetLastSeq()
+		tree.h.startSeq, err = tree.h.store.GetLastSeq(tree.snapshot)
 		if err != nil || tree.h.startSeq < 0 {
 			logging.Debug(tree.Stats())
 			logging.Fatal(err, tree.h.startSeq)
@@ -135,6 +137,19 @@ func (self *Radix) superVistor() {
 			}
 		}
 	}
+}
+
+func (self *Radix) GetReadOnlyTree() *Radix {
+	self.lock.Lock()
+	defer self.lock.Unlock()
+	tree := *self
+	tree.snapshot = tree.h.store.NewSnapshot()
+	r := *tree.Root
+	r.Stat = statOnDisk
+	r.Children = nil
+	tree.Root = &r
+
+	return &tree
 }
 
 func (self *Radix) addNodesCallBack() {
@@ -202,7 +217,7 @@ func (self *Radix) DumpTree() error {
 		return nil
 	}
 
-	self.h.DumpNode(self.Root, 0)
+	self.h.DumpNode(self.Root, 0, self.snapshot)
 
 	return nil
 }
@@ -313,7 +328,7 @@ func (self *Radix) Lookup(key string) []byte {
 
 	if x, _, ok := self.Root.lookup([]byte(key), self); ok && len(x.Value) > 0 {
 		// logging.Debugf("GetValueFromStore %+v", x)
-		buf, err := self.h.GetValueFromStore(x.Value)
+		buf, err := self.h.GetValueFromStore(x.Value, self.snapshot)
 		if err != nil {
 			return nil
 		}
@@ -353,7 +368,7 @@ func (self *Radix) GetWithVersion(key string) ([]byte, int64) {
 	k := []byte(key)
 	self.lock.RLock()
 	if x, _, ok := self.Root.lookup(k, self); ok && len(x.Value) > 0 {
-		buf, err := self.h.GetValueFromStore(x.Value)
+		buf, err := self.h.GetValueFromStore(x.Value, self.snapshot)
 		if err != nil {
 			atomic.AddInt64(&self.stats.getFailed, 1)
 			self.lock.RUnlock()
@@ -404,7 +419,7 @@ func (self *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, l
 		tuple := e.Value.(*Tuple)
 		key := tuple.Value
 		if tuple.Type == RESULT_CONTENT {
-			value, err := self.h.store.GetKey([]byte(key))
+			value, err := self.h.store.GetKey([]byte(key), self.snapshot)
 			if err != nil {
 				logging.Error("should never happend", e.Value)
 				continue
@@ -476,5 +491,16 @@ func (self *Radix) StorageGet(key []byte) ([]byte, error) {
 	self.lock.RLock()
 	defer self.lock.RUnlock()
 
-	return self.h.store.GetKey(key)
+	return self.h.store.GetKey(key, self.snapshot)
+}
+
+func (self *Radix) Backup(path string) chan error {
+	rtree := self.GetReadOnlyTree()
+	ch := make(chan error, 1)
+	go func() {
+		ch <- rtree.h.store.Backup(path, rtree.snapshot)
+		rtree.h.store.ReleaseSnapshot(rtree.snapshot)
+	}()
+
+	return ch
 }

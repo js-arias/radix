@@ -33,6 +33,7 @@ type readResult struct {
 type request struct {
 	seq      int64
 	resultCh chan *readResult
+	snapshot interface{}
 }
 
 type persistentArg struct {
@@ -57,7 +58,7 @@ func NewHelper(s Storage, startSeq int64) *helper {
 
 func (self *helper) work() {
 	for req := range self.reqch {
-		n, err := self.readRadDiskNode(req.seq)
+		n, err := self.readRadDiskNode(req.seq, req.snapshot)
 		if err != nil {
 			logging.Fatalf("should never happend %+v", req)
 			req.resultCh <- &readResult{nil, err}
@@ -158,12 +159,12 @@ func (self *helper) ResetInMemoryNodeCount() {
 	atomic.StoreInt64(&self.inmemoryNodeCount, 0)
 }
 
-func (self *helper) GetValueFromStore(key []byte) ([]byte, error) {
-	return self.store.GetKey(key)
+func (self *helper) GetValueFromStore(key []byte, snapshot interface{}) ([]byte, error) {
+	return self.store.GetKey(key, snapshot)
 }
 
-func (self *helper) readRadDiskNode(seq int64) (*radDiskNode, error) {
-	buf, err := self.store.ReadNode(strconv.FormatInt(seq, 10))
+func (self *helper) readRadDiskNode(seq int64, snapshot interface{}) (*radDiskNode, error) {
+	buf, err := self.store.ReadNode(strconv.FormatInt(seq, 10), snapshot)
 	if err != nil {
 		logging.Fatal(err, seq)
 		return nil, err
@@ -185,12 +186,12 @@ func (self *helper) readRadDiskNode(seq int64) (*radDiskNode, error) {
 	return &x, nil
 }
 
-func (self *helper) getNodeFromDisk(n *radNode) error {
+func (self *helper) getNodeFromDisk(n *radNode, snapshot interface{}) error {
 	if n.Stat != statLoading { //check if multithread loading the same node
 		panic("never happend")
 	}
 
-	tmp, err := self.readRadDiskNode(n.Seq)
+	tmp, err := self.readRadDiskNode(n.Seq, snapshot)
 	if err != nil {
 		if n.Seq != ROOT_SEQ {
 			panic(err.Error())
@@ -212,7 +213,7 @@ func (self *helper) getNodeFromDisk(n *radNode) error {
 
 	//send request
 	for _, seq := range tmp.Children {
-		self.reqch <- request{seq: seq, resultCh: resultCh}
+		self.reqch <- request{seq: seq, resultCh: resultCh, snapshot: snapshot}
 	}
 
 	self.AddInMemoryNodeCount(len(n.Children))
@@ -232,13 +233,13 @@ func (self *helper) getNodeFromDisk(n *radNode) error {
 	return err
 }
 
-func (self *helper) getChildrenByNode(n *radNode) error {
+func (self *helper) getChildrenByNode(n *radNode, snapshot interface{}) error {
 	for {
 		stat := atomic.LoadInt64(&n.Stat)
 		switch stat {
 		case statOnDisk:
 			if atomic.CompareAndSwapInt64(&n.Stat, statOnDisk, statLoading) { //try to get ownership
-				if err := self.getNodeFromDisk(n); err != nil {
+				if err := self.getNodeFromDisk(n, snapshot); err != nil {
 					if !atomic.CompareAndSwapInt64(&n.Stat, statLoading, statInMemory) {
 						panic("never happend")
 					}
@@ -268,12 +269,12 @@ func (self *helper) asyncPersistent(arg *persistentArg) {
 	self.persistentCh <- arg
 }
 
-func (self *helper) DumpNode(node *radNode, level int) error {
+func (self *helper) DumpNode(node *radNode, level int, snapshot interface{}) error {
 	if node == nil {
 		return nil
 	}
 
-	self.getChildrenByNode(node)
+	self.getChildrenByNode(node, snapshot)
 
 	emptyPrefix := ""
 	for i := 0; i < level; i++ {
@@ -288,7 +289,7 @@ func (self *helper) DumpNode(node *radNode, level int) error {
 		}
 
 		fmt.Printf("%s %s, value: %s, seq:%v, father:%v\n", emptyPrefix, n.Prefix, n.Value, n.Seq, n.father.Seq)
-		self.DumpNode(n, level+1)
+		self.DumpNode(n, level+1, snapshot)
 	}
 
 	return nil

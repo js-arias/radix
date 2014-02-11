@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const COUNT = 3000000
+const COUNT = 500000
 
 func TestCommon(t *testing.T) {
 
@@ -170,7 +170,7 @@ func TestDeleteAll(t *testing.T) {
 		t.Fatal("should be empty tree %+v", d)
 	}
 
-	if !r.h.store.IsEmpty() {
+	if !r.h.store.IsEmpty(r.snapshot) {
 		t.Error("should be empty", r.Stats())
 	}
 }
@@ -371,7 +371,7 @@ func TestRecursiveDelete(t *testing.T) {
 		t.Errorf("should be empty tree %+v", d)
 	}
 
-	if !r.h.store.IsEmpty() {
+	if !r.h.store.IsEmpty(r.snapshot) {
 		t.Error("should be empty", r.Stats())
 	}
 }
@@ -400,7 +400,7 @@ func TestDeleteCombine(t *testing.T) {
 		t.Errorf("should be empty tree %+v", d)
 	}
 
-	if !r.h.store.IsEmpty() {
+	if !r.h.store.IsEmpty(r.snapshot) {
 		t.Error("should be empty", r.Stats())
 	}
 }
@@ -461,7 +461,7 @@ func TestDeleteLastNodeCombine(t *testing.T) {
 		t.Errorf("should be empty tree %+v", d)
 	}
 
-	if !r.h.store.IsEmpty() {
+	if !r.h.store.IsEmpty(r.snapshot) {
 		t.Error("should be empty", r.Stats())
 	}
 }
@@ -523,7 +523,7 @@ func TestDeleteLastNodeCombineOnDisk(t *testing.T) {
 		t.Errorf("should be empty tree %+v", d)
 	}
 
-	if !r.h.store.IsEmpty() {
+	if !r.h.store.IsEmpty(r.snapshot) {
 		t.Error("should be empty", r.Stats())
 	}
 }
@@ -585,7 +585,7 @@ func TestRecursiveDelete1(t *testing.T) {
 		t.Errorf("should be empty tree %+v", d)
 	}
 
-	if !r.h.store.IsEmpty() {
+	if !r.h.store.IsEmpty(r.snapshot) {
 		t.Error("should be empty", r.Stats())
 	}
 
@@ -784,7 +784,7 @@ func TestLookupByPrefixAndDelimiterWith1Child(t *testing.T) {
 
 	r.Delete("tester")
 
-	if !r.h.store.IsEmpty() {
+	if !r.h.store.IsEmpty(r.snapshot) {
 		t.Error("should be empty", r.Stats())
 	}
 }
@@ -1356,7 +1356,7 @@ func TestConcurrent(t *testing.T) {
 		t.Errorf("should be empty tree %+v", d)
 	}
 
-	if !r.h.store.IsEmpty() {
+	if !r.h.store.IsEmpty(r.snapshot) {
 		t.Error("should be empty", r.Stats())
 	}
 
@@ -1395,7 +1395,7 @@ func TestOnDiskDeleteCut(t *testing.T) {
 		t.Errorf("should be empty tree %+v", d)
 	}
 
-	if !r.h.store.IsEmpty() {
+	if !r.h.store.IsEmpty(r.snapshot) {
 		t.Error("should be empty", r.Stats())
 	}
 
@@ -1434,7 +1434,7 @@ func TestOnDiskDelete(t *testing.T) {
 		t.Errorf("should be empty tree %+v", d)
 	}
 
-	if !r.h.store.IsEmpty() {
+	if !r.h.store.IsEmpty(r.snapshot) {
 		t.Error("should be empty", r.Stats())
 	}
 
@@ -1473,7 +1473,7 @@ func TestCutEdge(t *testing.T) {
 		t.Errorf("should be empty tree %+v", d)
 	}
 
-	if !r.h.store.IsEmpty() {
+	if !r.h.store.IsEmpty(r.snapshot) {
 		t.Error("should be empty", r.Stats())
 	}
 
@@ -1548,7 +1548,7 @@ func TestConcurrentReadDelete(t *testing.T) {
 		t.Errorf("should be empty tree %+v", d)
 	}
 
-	if !r.h.store.IsEmpty() {
+	if !r.h.store.IsEmpty(r.snapshot) {
 		t.Error("should be empty", r.Stats())
 	}
 
@@ -1559,6 +1559,85 @@ func TestConcurrentReadDelete(t *testing.T) {
 			t.Error("expect nil")
 		}
 	}
+}
+
+func TestBackup(t *testing.T) {
+	runtime.GOMAXPROCS(4)
+	r := Open(".")
+	defer r.Destory()
+
+	count := 1000000
+
+	log.Println("total count", count)
+
+	for i := 0; i < count; i++ {
+		str := fmt.Sprintf("%d", i)
+		r.Insert(str, str)
+	}
+
+	goroutineCount := 5
+
+	ch := r.Backup("bakdb")
+
+	wg := sync.WaitGroup{}
+	wg.Add(goroutineCount)
+	f := func(start, end int) {
+		log.Println("start-end", start, end)
+		for i := start; i < end; i++ {
+			str := fmt.Sprintf("%d", i)
+			buf, version := r.GetWithVersion(str)
+			if version != 0 || string(buf) != str {
+				t.FailNow()
+			}
+		}
+		log.Println("read done")
+		wg.Done()
+	}
+
+	for i := 0; i < goroutineCount; i++ {
+		go f(i*count/goroutineCount, (i+1)*count/goroutineCount)
+	}
+
+	wg.Wait()
+
+	wg.Add(goroutineCount)
+
+	d := func(start, end int) {
+		for i := start; i < end; i++ {
+			str := fmt.Sprintf("%d", i)
+			old := r.Delete(str)
+
+			if string(old) != str {
+				t.Errorf("delete value not match old %s expect %s", string(old), str)
+			}
+		}
+		log.Println("delete done")
+		wg.Done()
+	}
+
+	for i := 0; i < goroutineCount; i++ {
+		go d(i*count/goroutineCount, (i+1)*count/goroutineCount)
+	}
+
+	wg.Wait()
+
+	for _, d := range r.Root.Children {
+		t.Errorf("should be empty tree %+v", d)
+	}
+
+	if !r.h.store.IsEmpty(r.snapshot) {
+		t.Error("should be empty", r.Stats())
+	}
+
+	for i := 0; i < count; i++ {
+		str := fmt.Sprintf("%d", i)
+		old := r.Delete(str)
+		if old != nil {
+			t.Error("expect nil")
+		}
+	}
+
+	<-ch
 }
 
 func TestConcurrentRandomReadWrite(t *testing.T) {
@@ -1648,7 +1727,7 @@ func TestConcurrentRandomReadWrite(t *testing.T) {
 		t.Errorf("should be empty tree %+v", d)
 	}
 
-	if !r.h.store.IsEmpty() {
+	if !r.h.store.IsEmpty(r.snapshot) {
 		t.Error("should be empty", r.Stats())
 	}
 

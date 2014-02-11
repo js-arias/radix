@@ -14,8 +14,8 @@ type Levelstorage struct {
 	db           *leveldb.DB
 	cache        *leveldb.Cache
 	opts         *leveldb.Options
-	ro           *leveldb.ReadOptions
-	wo           *leveldb.WriteOptions
+
+	wo *leveldb.WriteOptions
 }
 
 var LAST_SEQ_KEY = []byte("##LAST_SEQ_KEY")
@@ -23,12 +23,10 @@ var LAST_SEQ_KEY = []byte("##LAST_SEQ_KEY")
 var l sync.Mutex
 
 func (self *Levelstorage) Open(path string) (err error) {
-	self.ro = leveldb.NewReadOptions()
 	self.wo = leveldb.NewWriteOptions()
 	self.opts = leveldb.NewOptions()
-	self.cache = leveldb.NewLRUCache(100 * 1024 * 1024)
+	self.cache = leveldb.NewLRUCache(1000 * 1024 * 1024)
 	self.opts.SetCache(self.cache)
-	self.ro.SetFillCache(true)
 
 	self.opts.SetCreateIfMissing(true)
 	self.opts.SetBlockSize(8 * 1024 * 1024)
@@ -80,12 +78,18 @@ func (self *Levelstorage) WriteNode(key string, value []byte) error {
 	return nil
 }
 
-func (self *Levelstorage) ReadNode(key string) ([]byte, error) {
+func (self *Levelstorage) ReadNode(key string, snapshot interface{}) ([]byte, error) {
 	if len(key) == 0 {
 		logging.Fatal("zero key found")
 	}
 
-	return self.db.Get(self.ro, []byte(key))
+	ro := leveldb.NewReadOptions()
+	ro.SetFillCache(true)
+	defer ro.Close()
+	if snapshot != nil {
+		ro.SetSnapshot(snapshot.(*leveldb.Snapshot))
+	}
+	return self.db.Get(ro, []byte(key))
 }
 
 func (self *Levelstorage) DelNode(key []byte) error {
@@ -100,7 +104,7 @@ func (self *Levelstorage) DelNode(key []byte) error {
 
 func (self *Levelstorage) Close() error {
 	self.db.Close()
-	self.ro.Close()
+
 	self.wo.Close()
 	self.opts.Close()
 	if self.cache != nil {
@@ -108,7 +112,6 @@ func (self *Levelstorage) Close() error {
 	}
 
 	self.db = nil
-	self.ro = nil
 	self.wo = nil
 	self.opts = nil
 	self.cache = nil
@@ -123,8 +126,15 @@ func (self *Levelstorage) SaveLastSeq(seq int64) error {
 	return nil
 }
 
-func (self *Levelstorage) GetLastSeq() (int64, error) {
-	seqstr, err := self.db.Get(self.ro, LAST_SEQ_KEY)
+func (self *Levelstorage) GetLastSeq(snapshot interface{}) (int64, error) {
+	ro := leveldb.NewReadOptions()
+	ro.SetFillCache(true)
+	defer ro.Close()
+	if snapshot != nil {
+		ro.SetSnapshot(snapshot.(*leveldb.Snapshot))
+	}
+
+	seqstr, err := self.db.Get(ro, LAST_SEQ_KEY)
 	if err != nil {
 		return -1, err
 	}
@@ -156,12 +166,20 @@ func (self *Levelstorage) PutKey(key []byte, value []byte) error {
 	return nil
 }
 
-func (self *Levelstorage) GetKey(key []byte) ([]byte, error) {
+func (self *Levelstorage) GetKey(key []byte, snapshot interface{}) ([]byte, error) {
 	if len(key) == 0 {
 		panic("key can't be nil")
 		logging.Fatal("zero key found")
 	}
-	return self.db.Get(self.ro, key)
+
+	ro := leveldb.NewReadOptions()
+	ro.SetFillCache(true)
+	defer ro.Close()
+	if snapshot != nil {
+		ro.SetSnapshot(snapshot.(*leveldb.Snapshot))
+	}
+
+	return self.db.Get(ro, key)
 }
 
 func (self *Levelstorage) internalStats() string {
@@ -170,13 +188,20 @@ func (self *Levelstorage) internalStats() string {
 }
 
 func (self *Levelstorage) Stats() string {
-	return self.dumpAll() //self.internalStats()
+	return self.dumpAll(nil) //self.internalStats()
 }
 
-func (self *Levelstorage) dumpAll() string {
+func (self *Levelstorage) dumpAll(snapshot interface{}) string {
 	b := bytes.Buffer{}
 	b.WriteString("storage stats:\n")
-	it := self.db.NewIterator(self.ro)
+
+	ro := leveldb.NewReadOptions()
+	ro.SetFillCache(true)
+	defer ro.Close()
+	if snapshot != nil {
+		ro.SetSnapshot(snapshot.(*leveldb.Snapshot))
+	}
+	it := self.db.NewIterator(ro)
 	defer it.Close()
 
 	it.SeekToFirst()
@@ -192,8 +217,14 @@ func (self *Levelstorage) dumpAll() string {
 
 // ##LAST_SEQ_KEY  ----> 19
 // -1  ----> {"Version":0,"Seq":-1,"OnDisk":true}
-func (self *Levelstorage) IsEmpty() bool {
-	it := self.db.NewIterator(self.ro)
+func (self *Levelstorage) IsEmpty(snapshot interface{}) bool {
+	ro := leveldb.NewReadOptions()
+	ro.SetFillCache(true)
+	defer ro.Close()
+	if snapshot != nil {
+		ro.SetSnapshot(snapshot.(*leveldb.Snapshot))
+	}
+	it := self.db.NewIterator(ro)
 	defer it.Close()
 
 	cnt := 0
@@ -207,4 +238,57 @@ func (self *Levelstorage) IsEmpty() bool {
 	}
 
 	return true
+}
+
+func (self *Levelstorage) Backup(path string, snapshot interface{}) error {
+	ro := leveldb.NewReadOptions()
+	defer ro.Close()
+	if snapshot != nil {
+		ro.SetSnapshot(snapshot.(*leveldb.Snapshot))
+	}
+	it := self.db.NewIterator(ro)
+	defer it.Close()
+
+	//create new database
+	opts := leveldb.NewOptions()
+	defer opts.Close()
+
+	opts.SetCreateIfMissing(true)
+	opts.SetBlockSize(8 * 1024 * 1024)
+	opts.SetWriteBufferSize(50 * 1024 * 1024)
+	opts.SetCompression(leveldb.SnappyCompression)
+	db, err := leveldb.Open(path, opts)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	wo := leveldb.NewWriteOptions()
+	defer wo.Close()
+
+	cnt := 0
+	it.SeekToFirst()
+	for ; it.Valid(); it.Next() {
+		cnt++
+		db.Put(wo, it.Key(), it.Value())
+	}
+
+	return nil
+}
+
+func (self *Levelstorage) NewSnapshot() interface{} {
+	snapshot := self.db.NewSnapshot()
+	if snapshot == nil {
+		logging.Fatal("get snapshot failed")
+	}
+
+	return snapshot
+}
+
+func (self *Levelstorage) ReleaseSnapshot(snapshot interface{}) {
+	if snapshot == nil {
+		logging.Fatal("snapshot can't be nil")
+	}
+
+	self.db.ReleaseSnapshot(snapshot.(*leveldb.Snapshot))
 }
