@@ -26,7 +26,7 @@ func (self *Levelstorage) Open(path string) (err error) {
 	self.ro = leveldb.NewReadOptions()
 	self.wo = leveldb.NewWriteOptions()
 	self.opts = leveldb.NewOptions()
-	self.cache = leveldb.NewLRUCache(1 * 1024 * 1024 * 1024)
+	self.cache = leveldb.NewLRUCache(100 * 1024 * 1024)
 	self.opts.SetCache(self.cache)
 	self.ro.SetFillCache(true)
 

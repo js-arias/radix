@@ -32,7 +32,7 @@ type readResult struct {
 
 type request struct {
 	seq      int64
-	resultCh chan *readResult //create less object
+	resultCh chan *readResult
 }
 
 type persistentArg struct {
@@ -42,7 +42,7 @@ type persistentArg struct {
 }
 
 func NewHelper(s Storage, startSeq int64) *helper {
-	h := &helper{store: s, startSeq: startSeq, reqch: make(chan request, 1024),
+	h := &helper{store: s, startSeq: startSeq, reqch: make(chan request, 0 /*1024*/),
 		persistentCh: make(chan *persistentArg, 3)}
 	for i := 0; i < maxworker; i++ {
 		go h.work()
@@ -250,13 +250,13 @@ func (self *helper) getChildrenByNode(n *radNode) error {
 				}
 				return nil
 			} else { //someone is loading it
-				n := rand.Int31n(100)
+				n := rand.Int31n(20)
 				time.Sleep(time.Duration(n) * time.Microsecond)
 			}
 		case statInMemory:
 			return nil
 		case statLoading:
-			n := rand.Int31n(100)
+			n := rand.Int31n(20)
 			time.Sleep(time.Duration(n) * time.Microsecond)
 		default:
 			logging.Fatal("error stat", stat)

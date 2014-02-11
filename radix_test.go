@@ -1043,7 +1043,7 @@ func TestLookupByPrefixAndDelimiter_complex_many_bigkey(t *testing.T) {
 		b.WriteByte('c')
 	}
 
-	count := COUNT / 5
+	count := 5000
 
 	buf := b.String()
 	for i := 0; i < count; i++ {
