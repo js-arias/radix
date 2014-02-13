@@ -32,6 +32,7 @@ type readResult struct {
 
 type request struct {
 	seq      int64
+	buf      []byte
 	resultCh chan *readResult
 	snapshot interface{}
 }
@@ -43,7 +44,7 @@ type persistentArg struct {
 }
 
 func NewHelper(s Storage, startSeq int64) *helper {
-	h := &helper{store: s, startSeq: startSeq, reqch: make(chan request, 0 /*1024*/),
+	h := &helper{store: s, startSeq: startSeq, reqch: make(chan request, 1024),
 		persistentCh: make(chan *persistentArg, 3)}
 	for i := 0; i < maxworker; i++ {
 		go h.work()
@@ -58,7 +59,7 @@ func NewHelper(s Storage, startSeq int64) *helper {
 
 func (self *helper) work() {
 	for req := range self.reqch {
-		n, err := self.readRadDiskNode(req.seq, req.snapshot)
+		n, err := self.unmarshal2radDiskNode(req.buf)
 		if err != nil {
 			logging.Fatalf("should never happend %+v", req)
 			req.resultCh <- &readResult{nil, err}
@@ -163,7 +164,7 @@ func (self *helper) GetValueFromStore(key []byte, snapshot interface{}) ([]byte,
 	return self.store.GetKey(key, snapshot)
 }
 
-func (self *helper) readRadDiskNode(seq int64, snapshot interface{}) (*radDiskNode, error) {
+func (self *helper) doRead(seq int64, snapshot interface{}) ([]byte, error) {
 	buf, err := self.store.ReadNode(strconv.FormatInt(seq, 10), snapshot)
 	if err != nil {
 		logging.Fatal(err, seq)
@@ -176,14 +177,61 @@ func (self *helper) readRadDiskNode(seq int64, snapshot interface{}) (*radDiskNo
 		return nil, fmt.Errorf("get key %d failed, is database empty?", seq)
 	}
 
+	return buf, err
+}
+
+func (self *helper) unmarshal2radDiskNode(buf []byte) (*radDiskNode, error) {
 	var x radDiskNode
-	err = enc.Unmarshal(buf, &x)
+	err := enc.Unmarshal(buf, &x)
 	if err != nil {
 		logging.Fatal(err)
 		return nil, err
 	}
 
 	return &x, nil
+}
+
+func (self *helper) readRadDiskNode(seq int64, snapshot interface{}) (*radDiskNode, error) {
+	buf, err := self.doRead(seq, snapshot)
+	if err != nil {
+		return nil, err
+	}
+
+	return self.unmarshal2radDiskNode(buf)
+}
+
+func (self *helper) getChildren(tmp *radDiskNode, seq int64) []*radNode {
+	// logging.Infof("%+v", tmp)
+	var children []*radNode
+
+	if len(tmp.Children) > 0 {
+		children = make([]*radNode, len(tmp.Children), len(tmp.Children))
+	} else {
+		return nil
+	}
+
+	resultCh := make(chan *readResult, len(tmp.Children))
+
+	//send request
+	for _, seq := range tmp.Children {
+		buf, err := self.doRead(seq, nil)
+		if err != nil {
+			logging.Fatal(err)
+		}
+		self.reqch <- request{seq: seq, buf: buf, resultCh: resultCh}
+	}
+
+	//read result
+	for i, _ := range tmp.Children {
+		res := <-resultCh
+		if res.err != nil {
+			panic("should never happend")
+		}
+
+		children[i] = res.n
+	}
+
+	return children
 }
 
 func (self *helper) getNodeFromDisk(n *radNode, snapshot interface{}) error {
@@ -202,35 +250,15 @@ func (self *helper) getNodeFromDisk(n *radNode, snapshot interface{}) error {
 		}
 	}
 
-	// logging.Infof("%+v", tmp)
-	if len(tmp.Children) > 0 {
-		n.Children = make([]*radNode, len(tmp.Children), len(tmp.Children))
-	} else {
-		return nil
-	}
-
-	resultCh := make(chan *readResult, len(tmp.Children))
-
-	//send request
-	for _, seq := range tmp.Children {
-		self.reqch <- request{seq: seq, resultCh: resultCh, snapshot: snapshot}
+	n.Children = self.getChildren(tmp, n.Seq)
+	for _, e := range n.Children {
+		e.father = n
 	}
 
 	self.AddInMemoryNodeCount(len(n.Children))
 
-	//read result
-	for i, _ := range tmp.Children {
-		res := <-resultCh
-		if res.err != nil {
-			panic("should never happend")
-		}
-
-		res.n.father = n
-		n.Children[i] = res.n
-	}
-
 	// logging.Infof("load from disk %+v", n)
-	return err
+	return nil
 }
 
 func (self *helper) getChildrenByNode(n *radNode, snapshot interface{}) error {

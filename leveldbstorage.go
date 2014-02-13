@@ -25,7 +25,7 @@ var l sync.Mutex
 func (self *Levelstorage) Open(path string) (err error) {
 	self.wo = leveldb.NewWriteOptions()
 	self.opts = leveldb.NewOptions()
-	self.cache = leveldb.NewLRUCache(1000 * 1024 * 1024)
+	self.cache = leveldb.NewLRUCache(100 * 1024 * 1024)
 	self.opts.SetCache(self.cache)
 
 	self.opts.SetCreateIfMissing(true)
@@ -85,11 +85,13 @@ func (self *Levelstorage) ReadNode(key string, snapshot interface{}) ([]byte, er
 
 	ro := leveldb.NewReadOptions()
 	ro.SetFillCache(true)
-	defer ro.Close()
+
 	if snapshot != nil {
 		ro.SetSnapshot(snapshot.(*leveldb.Snapshot))
 	}
-	return self.db.Get(ro, []byte(key))
+	buf, err := self.db.Get(ro, []byte(key))
+	ro.Close()
+	return buf, err
 }
 
 func (self *Levelstorage) DelNode(key []byte) error {
@@ -129,12 +131,13 @@ func (self *Levelstorage) SaveLastSeq(seq int64) error {
 func (self *Levelstorage) GetLastSeq(snapshot interface{}) (int64, error) {
 	ro := leveldb.NewReadOptions()
 	ro.SetFillCache(true)
-	defer ro.Close()
+
 	if snapshot != nil {
 		ro.SetSnapshot(snapshot.(*leveldb.Snapshot))
 	}
 
 	seqstr, err := self.db.Get(ro, LAST_SEQ_KEY)
+	ro.Close()
 	if err != nil {
 		return -1, err
 	}
@@ -174,12 +177,15 @@ func (self *Levelstorage) GetKey(key []byte, snapshot interface{}) ([]byte, erro
 
 	ro := leveldb.NewReadOptions()
 	ro.SetFillCache(true)
-	defer ro.Close()
+
 	if snapshot != nil {
 		ro.SetSnapshot(snapshot.(*leveldb.Snapshot))
 	}
 
-	return self.db.Get(ro, key)
+	buf, err := self.db.Get(ro, key)
+	ro.Close()
+
+	return buf, err
 }
 
 func (self *Levelstorage) internalStats() string {
