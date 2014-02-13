@@ -2,6 +2,7 @@ package radix
 
 import (
 	"container/list"
+	enc "encoding/json"
 	"fmt"
 	"github.com/ngaut/logging"
 	"log"
@@ -255,7 +256,7 @@ func (self *Radix) Delete(key string) []byte {
 }
 
 // Insert put a Value in the radix. It returns old value if exist
-func (self *Radix) Insert(key string, Value string) ([]byte, error) {
+func (self *Radix) Insert(key string, Value string, version int64) ([]byte, error) {
 	start := time.Now()
 	defer func() {
 		if n := time.Since(start).Nanoseconds() / 1000 / 1000; n > 500 {
@@ -264,13 +265,19 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 	}()
 
 	k := []byte(key)
-	v := []byte(Value)
+	vv := &versionValue{Version: version, Value: Value}
 	internalKey := encodeValueToInternalKey(k)
+
+	buf, err := enc.Marshal(vv)
+	if err != nil {
+		logging.Error(err)
+		return nil, err
+	}
 
 	self.lock.Lock()
 
 	self.beginWriteBatch()
-	oldvalue, err := self.Root.put(k, v, internalKey, invalid_version, false, self)
+	oldvalue, err := self.Root.put(k, buf, internalKey, invalid_version, false, self)
 	if err != nil {
 		self.stats.insertFailed++
 		logging.Info(err)
@@ -293,10 +300,16 @@ func (self *Radix) Insert(key string, Value string) ([]byte, error) {
 	return oldvalue, nil
 }
 
-func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) {
+func (self *Radix) CAS(key string, Value string, version int64, newVersion int64) ([]byte, error) {
 	k := []byte(key)
-	v := []byte(Value)
+	vv := &versionValue{Version: newVersion, Value: Value}
 	internalKey := encodeValueToInternalKey(k)
+
+	buf, err := enc.Marshal(vv)
+	if err != nil {
+		logging.Error(err)
+		return nil, err
+	}
 
 	self.lock.Lock()
 	defer func() {
@@ -305,7 +318,7 @@ func (self *Radix) CAS(key string, Value string, version int64) ([]byte, error) 
 	}()
 
 	self.beginWriteBatch()
-	oldvalue, err := self.Root.put(k, v, internalKey, version, false, self)
+	oldvalue, err := self.Root.put(k, buf, internalKey, version, false, self)
 	if err != nil {
 		logging.Info(err)
 		self.commitWriteBatch()
@@ -328,11 +341,11 @@ func (self *Radix) Lookup(key string) []byte {
 
 	if x, _, ok := self.Root.lookup([]byte(key), self); ok && len(x.Value) > 0 {
 		// logging.Debugf("GetValueFromStore %+v", x)
-		buf, err := self.h.GetValueFromStore(x.Value, self.snapshot)
+		vv, err := self.h.GetValueFromStore(x.Value, self.snapshot)
 		if err != nil {
 			return nil
 		}
-		return buf
+		return []byte(vv.Value)
 	}
 
 	return nil
@@ -367,8 +380,9 @@ func (self *Radix) FindInternalKey(key string) string {
 func (self *Radix) GetWithVersion(key string) ([]byte, int64) {
 	k := []byte(key)
 	self.lock.RLock()
+	//todo: using internal key to get, no need to call lookup
 	if x, _, ok := self.Root.lookup(k, self); ok && len(x.Value) > 0 {
-		buf, err := self.h.GetValueFromStore(x.Value, self.snapshot)
+		vv, err := self.h.GetValueFromStore(x.Value, self.snapshot)
 		if err != nil {
 			atomic.AddInt64(&self.stats.getFailed, 1)
 			self.lock.RUnlock()
@@ -378,7 +392,7 @@ func (self *Radix) GetWithVersion(key string) ([]byte, int64) {
 		atomic.AddInt64(&self.stats.getSuccess, 1)
 
 		self.lock.RUnlock()
-		return buf, x.Version
+		return []byte(vv.Value), vv.Version
 	}
 
 	atomic.AddInt64(&self.stats.getFailed, 1)

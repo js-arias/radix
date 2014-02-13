@@ -38,9 +38,9 @@ type request struct {
 }
 
 type persistentArg struct {
-	n     *radNode
-	value []byte
-	wg    *sync.WaitGroup
+	n  *radNode
+	vv []byte
+	wg *sync.WaitGroup
 }
 
 func NewHelper(s Storage, startSeq int64) *helper {
@@ -73,7 +73,7 @@ func (self *helper) work() {
 
 func (self *helper) persistentWorker() {
 	for arg := range self.persistentCh {
-		self.persistentNode(arg.n, arg.value)
+		self.persistentNode(arg.n, arg.vv)
 		arg.wg.Done()
 	}
 }
@@ -90,7 +90,7 @@ func (self *helper) allocSeq() int64 {
 }
 
 func (self *helper) makeRadDiskNode(n *radNode) *radDiskNode {
-	return &radDiskNode{Prefix: string(n.Prefix), Children: n.cloneChildrenSeq(), Value: string(n.Value), Version: n.Version}
+	return &radDiskNode{Prefix: string(n.Prefix), Children: n.cloneChildrenSeq(), Value: string(n.Value)}
 }
 
 func (self *helper) makeRadNode(x *radDiskNode, seq int64) *radNode {
@@ -99,11 +99,11 @@ func (self *helper) makeRadNode(x *radDiskNode, seq int64) *radNode {
 		stat = statInMemory
 	}
 
-	return &radNode{Prefix: []byte(x.Prefix), Value: []byte(x.Value), Version: x.Version,
+	return &radNode{Prefix: []byte(x.Prefix), Value: []byte(x.Value),
 		Seq: seq, Stat: stat}
 }
 
-func (self *helper) persistentNode(n *radNode, value []byte) error {
+func (self *helper) persistentNode(n *radNode, vv []byte) error {
 	x := self.makeRadDiskNode(n)
 
 	seq := strconv.FormatInt(n.Seq, 10)
@@ -118,9 +118,9 @@ func (self *helper) persistentNode(n *radNode, value []byte) error {
 		logging.Fatal(err)
 	}
 
-	if len(x.Value) > 0 && value != nil { //key exist
+	if len(x.Value) > 0 && vv != nil { //key exist
 		// logging.Println("putkey", n.Value, string(value))
-		if err = self.store.PutKey(n.Value, value); err != nil {
+		if err = self.store.PutKey(n.Value, vv); err != nil {
 			logging.Fatal(err)
 			return err
 		}
@@ -160,8 +160,21 @@ func (self *helper) ResetInMemoryNodeCount() {
 	atomic.StoreInt64(&self.inmemoryNodeCount, 0)
 }
 
-func (self *helper) GetValueFromStore(key []byte, snapshot interface{}) ([]byte, error) {
-	return self.store.GetKey(key, snapshot)
+func (self *helper) GetValueFromStore(key []byte, snapshot interface{}) (*versionValue, error) {
+	buf, err := self.store.GetKey(key, snapshot)
+	if err != nil {
+		logging.Fatal(err)
+		return nil, err
+	}
+
+	var vv versionValue
+	err = enc.Unmarshal(buf, &vv)
+	if err != nil {
+		logging.Fatal(err)
+		return nil, err
+	}
+
+	return &vv, nil
 }
 
 func (self *helper) doRead(seq int64, snapshot interface{}) ([]byte, error) {

@@ -142,11 +142,11 @@ func TestDeleteAll(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	r.Insert("test", "test")
-	r.Insert("slow", "slow")
-	r.Insert("water", "water")
-	r.Insert("te", "te")
-	r.Insert("tester", "tester")
+	r.Insert("test", "test", 0)
+	r.Insert("slow", "slow", 0)
+	r.Insert("water", "water", 0)
+	r.Insert("te", "te", 0)
+	r.Insert("tester", "tester", 0)
 
 	if string(r.Delete("te")) != "te" {
 		t.Error("delete not match")
@@ -210,28 +210,28 @@ func TestInsertion(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	r.Insert("test", "test")
-	r.Insert("slow", "slow")
-	r.Insert("water", "water")
+	r.Insert("test", "test", 0)
+	r.Insert("slow", "slow", 0)
+	r.Insert("water", "water", 0)
 	for _, d := range r.Root.Children {
 		if s := string(d.Value); decodeValueToKey(s) != string(d.Prefix) {
 			t.Errorf("d.Value = %s, want %s", s, d.Prefix)
 		}
 	}
-	r.Insert("slower", "slower")
-	r.Insert("team", "team")
+	r.Insert("slower", "slower", 0)
+	r.Insert("team", "team", 0)
 
-	r.Insert("tester", "tester")
+	r.Insert("tester", "tester", 0)
 
-	r.Insert("te", "te")
+	r.Insert("te", "te", 0)
 
-	if _, err := r.Insert("slow", "slow"); err == nil {
+	if _, err := r.Insert("slow", "slow", 1); err == nil {
 		t.Errorf("expecting error at insert")
 	}
-	if _, err := r.Insert("water", "water"); err == nil {
+	if _, err := r.Insert("water", "water", 1); err == nil {
 		t.Errorf("expecting error at insert")
 	}
-	if _, err := r.Insert("team", "team"); err == nil {
+	if _, err := r.Insert("team", "team", 1); err == nil {
 		t.Errorf("expecting error at insert")
 	}
 }
@@ -240,9 +240,9 @@ func TestGetChildrenCnt(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	r.Insert("1", "1")
-	r.Insert("11", "11")
-	r.Insert("12", "12")
+	r.Insert("1", "1", 0)
+	r.Insert("11", "11", 0)
+	r.Insert("12", "12", 0)
 	cnt := 0
 	getInMemChildrenCount(r.Root.Children[0], &cnt)
 	if cnt != 3 {
@@ -261,7 +261,7 @@ func TestGetChildrenCnt(t *testing.T) {
 		t.Errorf("should be 1, but we got %d", cnt)
 	}
 
-	r.Insert("111", "111")
+	r.Insert("111", "111", 0)
 	cnt = 0
 	getInMemChildrenCount(r.Root.Children[0].Children[0], &cnt)
 	if cnt != 2 {
@@ -274,7 +274,7 @@ func TestGetChildrenCnt(t *testing.T) {
 		t.Errorf("should be 1, but we got %d", cnt)
 	}
 
-	r.Insert("1111", "1111")
+	r.Insert("1111", "1111", 0)
 	cnt = 0
 	getInMemChildrenCount(r.Root.Children[0].Children[0], &cnt)
 	if cnt != 3 {
@@ -298,7 +298,7 @@ func TestCas(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	r.Insert("key", "value")
+	r.Insert("key", "value", 0)
 	{
 		value, version := r.GetWithVersion("key")
 		if string(value) != "value" {
@@ -312,7 +312,7 @@ func TestCas(t *testing.T) {
 
 	{
 		// log.Println("test cas")
-		value, err := r.CAS("key", "xx", 0)
+		value, err := r.CAS("key", "xx", 0, 1)
 		if err != nil {
 			t.Error(err)
 		}
@@ -333,15 +333,15 @@ func TestCas(t *testing.T) {
 
 	{
 		// log.Println("test cas should return error")
-		value, err := r.CAS("key", "xx", 0)
+		value, err := r.CAS("key", "xx", 0, 0)
 		if err == nil || value != nil {
 			t.Error("should raise error")
 		}
 	}
 
-	r.Insert("key1", "value1")
+	r.Insert("key1", "value1", 0)
 	for i := 0; i < 100; i++ {
-		r.CAS("key1", "xx", int64(i))
+		r.CAS("key1", "xx", int64(i), int64(i+1))
 		_, version := r.GetWithVersion("key1")
 		if version != int64(i+1) {
 			t.Errorf("version not match %d - %d", i+1, version)
@@ -353,12 +353,12 @@ func TestRecursiveDelete(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	r.Insert("t", "test")
-	r.Insert("te", "slow")
-	r.Insert("tes", "water")
-	r.Insert("test", "test")
-	r.Insert("teste", "test")
-	r.Insert("tester", "test")
+	r.Insert("t", "test", 0)
+	r.Insert("te", "slow", 0)
+	r.Insert("tes", "water", 0)
+	r.Insert("test", "test", 0)
+	r.Insert("teste", "test", 0)
+	r.Insert("tester", "test", 0)
 
 	r.Delete("tester")
 	r.Delete("teste")
@@ -380,15 +380,15 @@ func TestDeleteCombine(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	r.Insert("1", "1")
-	r.Insert("11", "11")
-	r.Insert("12", "12")
+	r.Insert("1", "1", 0)
+	r.Insert("11", "11", 0)
+	r.Insert("12", "12", 0)
 	r.Delete("1")
 	r.Delete("11")
 
-	r.Insert("2", "2")
-	r.Insert("21", "21")
-	r.Insert("22", "22")
+	r.Insert("2", "2", 0)
+	r.Insert("21", "21", 0)
+	r.Insert("22", "22", 0)
 
 	r.Delete("2")
 	r.Delete("21")
@@ -409,10 +409,10 @@ func TestDeleteLastNodeCombine(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	r.Insert("1", "1")
-	r.Insert("11", "11")
-	r.Insert("111", "111")
-	r.Insert("12", "12")
+	r.Insert("1", "1", 0)
+	r.Insert("11", "11", 0)
+	r.Insert("111", "111", 0)
+	r.Insert("12", "12", 0)
 	if string(r.Delete("1")) != "1" {
 		log.Fatal("not match")
 	}
@@ -420,11 +420,11 @@ func TestDeleteLastNodeCombine(t *testing.T) {
 		log.Fatal("not match")
 	}
 
-	r.Insert("2", "2")
-	r.Insert("21", "21")
-	r.Insert("22", "22")
-	r.Insert("211", "211")
-	r.Insert("212", "212")
+	r.Insert("2", "2", 0)
+	r.Insert("21", "21", 0)
+	r.Insert("22", "22", 0)
+	r.Insert("211", "211", 0)
+	r.Insert("212", "212", 0)
 
 	if string(r.Delete("212")) != "212" {
 		log.Fatal("not match")
@@ -469,10 +469,10 @@ func TestDeleteLastNodeCombine(t *testing.T) {
 func TestDeleteLastNodeCombineOnDisk(t *testing.T) {
 	r := Open(".")
 
-	r.Insert("1", "1")
-	r.Insert("11", "11")
-	r.Insert("111", "111")
-	r.Insert("12", "12")
+	r.Insert("1", "1", 0)
+	r.Insert("11", "11", 0)
+	r.Insert("111", "111", 0)
+	r.Insert("12", "12", 0)
 	r.Close()
 
 	r = Open(".")
@@ -483,11 +483,11 @@ func TestDeleteLastNodeCombineOnDisk(t *testing.T) {
 		log.Fatal("not match")
 	}
 
-	r.Insert("2", "2")
-	r.Insert("21", "21")
-	r.Insert("22", "22")
-	r.Insert("211", "211")
-	r.Insert("212", "212")
+	r.Insert("2", "2", 0)
+	r.Insert("21", "21", 0)
+	r.Insert("22", "22", 0)
+	r.Insert("211", "211", 0)
+	r.Insert("212", "212", 0)
 	r.Close()
 	r = Open(".")
 	defer r.Destory()
@@ -536,7 +536,7 @@ func TestRecursiveDeleteMany(t *testing.T) {
 
 	for i := 0; i < count; i++ {
 		str := fmt.Sprintf("%d", i)
-		r.Insert(str, str)
+		r.Insert(str, str, 0)
 	}
 
 	for i := 0; i < count; i++ {
@@ -567,12 +567,12 @@ func TestRecursiveDelete1(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	r.Insert("t", "test")
-	r.Insert("te", "slow")
-	r.Insert("tes", "water")
-	r.Insert("test", "test")
-	r.Insert("teste", "test")
-	r.Insert("tester", "test")
+	r.Insert("t", "test", 0)
+	r.Insert("te", "slow", 0)
+	r.Insert("tes", "water", 0)
+	r.Insert("test", "test", 0)
+	r.Insert("teste", "test", 0)
+	r.Insert("tester", "test", 0)
 
 	r.Delete("teste")
 	r.Delete("test")
@@ -617,14 +617,14 @@ func TestRecursiveDelete1(t *testing.T) {
 func TestDeleteDisk(t *testing.T) {
 	r := Open(".")
 
-	r.Insert("test", "test")
-	r.Insert("slow", "slow")
-	r.Insert("water", "water")
-	r.Insert("slower", "slower")
-	r.Insert("tester", "tester")
-	r.Insert("team", "team")
-	r.Insert("toast", "toast")
-	r.Insert("te", "te")
+	r.Insert("test", "test", 0)
+	r.Insert("slow", "slow", 0)
+	r.Insert("water", "water", 0)
+	r.Insert("slower", "slower", 0)
+	r.Insert("tester", "tester", 0)
+	r.Insert("team", "team", 0)
+	r.Insert("toast", "toast", 0)
+	r.Insert("te", "te", 0)
 
 	if s := r.Lookup("tester"); s == nil {
 		t.Error("expecting non nil")
@@ -684,7 +684,7 @@ func TestDeleteDisk(t *testing.T) {
 		t.Errorf("expecting nil found %v", s)
 	}
 
-	r.Insert("team", "tortugas")
+	r.Insert("team", "tortugas", 0)
 	if s := r.Lookup("team"); s != nil {
 		if string(s) != "tortugas" {
 			t.Errorf("expecting %s found %s", "tortugas", s)
@@ -696,18 +696,18 @@ func TestLookupByPrefixAndDelimiter(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	r.Insert("test", "")
-	r.Insert("slow", "")
-	r.Insert("water", "")
-	r.Insert("slower", "")
-	r.Insert("tester", "")
-	r.Insert("team", "")
+	r.Insert("test", "", 0)
+	r.Insert("slow", "", 0)
+	r.Insert("water", "", 0)
+	r.Insert("slower", "", 0)
+	r.Insert("tester", "", 0)
+	r.Insert("team", "", 0)
 
-	r.Insert("toast", "")
-	r.Insert("te", "te")
-	r.Insert("test123/1", "")
-	r.Insert("test123/2", "")
-	r.Insert("test123//2", "")
+	r.Insert("toast", "", 0)
+	r.Insert("te", "te", 0)
+	r.Insert("test123/1", "", 0)
+	r.Insert("test123/2", "", 0)
+	r.Insert("test123//2", "", 0)
 
 	l := r.LookupByPrefixAndDelimiter("t", "/", 100, 100, "")
 	if l.Len() != 6 {
@@ -730,12 +730,12 @@ func TestLookupByPrefixAndDelimiterWith1Child(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	r.Insert("t", "test")
-	r.Insert("te", "slow")
-	r.Insert("tes", "water")
-	r.Insert("test", "test")
-	r.Insert("teste", "test")
-	r.Insert("tester", "test")
+	r.Insert("t", "test", 0)
+	r.Insert("te", "slow", 0)
+	r.Insert("tes", "water", 0)
+	r.Insert("test", "test", 0)
+	r.Insert("teste", "test", 0)
+	r.Insert("tester", "test", 0)
 
 	if r.GetFirstLevelChildrenCount("t") != 1 {
 		t.Error("should be 1")
@@ -793,17 +793,17 @@ func TestLookupByPrefixAndDelimiter_complex(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	r.Insert("te#st", "")
-	r.Insert("slow", "")
-	r.Insert("water", "")
-	r.Insert("slower", "")
-	r.Insert("tester", "")
-	r.Insert("team", "")
-	r.Insert("toast", "")
-	r.Insert("te", "te")
-	r.Insert("test123/1//a", "")
-	r.Insert("test123/2", "")
-	r.Insert("test123//2", "")
+	r.Insert("te#st", "", 0)
+	r.Insert("slow", "", 0)
+	r.Insert("water", "", 0)
+	r.Insert("slower", "", 0)
+	r.Insert("tester", "", 0)
+	r.Insert("team", "", 0)
+	r.Insert("toast", "", 0)
+	r.Insert("te", "te", 0)
+	r.Insert("test123/1//a", "", 0)
+	r.Insert("test123/2", "", 0)
+	r.Insert("test123//2", "", 0)
 
 	l := r.LookupByPrefixAndDelimiter("t", "#", 100, 100, "")
 	if l.Len() != 8 {
@@ -852,17 +852,17 @@ func TestLookupByPrefixAndDelimiter_delimiterNotExist(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	r.Insert("te#st", "te#st")
-	r.Insert("slow", "slow")
-	r.Insert("water", "water")
-	r.Insert("slower", "slower")
-	r.Insert("tester", "tester")
-	r.Insert("team", "team")
-	r.Insert("toast", "toast")
-	r.Insert("te", "te")
-	r.Insert("test123/1//a", "test123/1//a")
-	r.Insert("test123/2", "test123/2")
-	r.Insert("test123//2", "test123//2")
+	r.Insert("te#st", "te#st", 0)
+	r.Insert("slow", "slow", 0)
+	r.Insert("water", "water", 0)
+	r.Insert("slower", "slower", 0)
+	r.Insert("tester", "tester", 0)
+	r.Insert("team", "team", 0)
+	r.Insert("toast", "toast", 0)
+	r.Insert("te", "te", 0)
+	r.Insert("test123/1//a", "test123/1//a", 0)
+	r.Insert("test123/2", "test123/2", 0)
+	r.Insert("test123//2", "test123//2", 0)
 
 	l := r.LookupByPrefixAndDelimiter("", "*", 100, 100, "")
 	if l.Len() != 11 {
@@ -901,17 +901,17 @@ func TestLookupByPrefixAndDelimiter_limit(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	r.Insert("test", "")
-	r.Insert("slow", "")
-	r.Insert("water", "")
-	r.Insert("slower", "")
-	r.Insert("tester", "")
-	r.Insert("team", "")
-	r.Insert("toast", "")
-	r.Insert("te", "te")
-	r.Insert("test123/1", "")
-	r.Insert("test123/2", "")
-	r.Insert("test123//2", "")
+	r.Insert("test", "", 0)
+	r.Insert("slow", "", 0)
+	r.Insert("water", "", 0)
+	r.Insert("slower", "", 0)
+	r.Insert("tester", "", 0)
+	r.Insert("team", "", 0)
+	r.Insert("toast", "", 0)
+	r.Insert("te", "te", 0)
+	r.Insert("test123/1", "", 0)
+	r.Insert("test123/2", "", 0)
+	r.Insert("test123//2", "", 0)
 
 	l := r.LookupByPrefixAndDelimiter("t", "/", 2, 100, "")
 	if l.Len() != 2 {
@@ -942,17 +942,17 @@ func TestLookupByPrefixAndDelimiter_limit_marker(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	r.Insert("test", "")
-	r.Insert("slow", "")
-	r.Insert("water", "")
-	r.Insert("slower", "")
-	r.Insert("tester", "")
-	r.Insert("team", "")
-	r.Insert("toast", "")
-	r.Insert("te", "te")
-	r.Insert("test123/1", "")
-	r.Insert("test123/2", "")
-	r.Insert("test123//2", "")
+	r.Insert("test", "", 0)
+	r.Insert("slow", "", 0)
+	r.Insert("water", "", 0)
+	r.Insert("slower", "", 0)
+	r.Insert("tester", "", 0)
+	r.Insert("team", "", 0)
+	r.Insert("toast", "", 0)
+	r.Insert("te", "te", 0)
+	r.Insert("test123/1", "", 0)
+	r.Insert("test123/2", "", 0)
+	r.Insert("test123//2", "", 0)
 
 	l := r.LookupByPrefixAndDelimiter("t", "/", 5, 100, "test")
 	if l.Len() != 2 {
@@ -967,17 +967,17 @@ func TestLookupByPrefixAndDelimiter_limit_marker1(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	r.Insert("test", "1")
-	r.Insert("slow", "2")
-	r.Insert("water", "3")
-	r.Insert("slower", "4")
-	r.Insert("tester", "5")
-	r.Insert("team", "6")
-	r.Insert("toast", "7")
-	r.Insert("te", "te")
-	r.Insert("test123/1", "8")
-	r.Insert("test123/2", "9")
-	r.Insert("test123//2", "10")
+	r.Insert("test", "1", 0)
+	r.Insert("slow", "2", 0)
+	r.Insert("water", "3", 0)
+	r.Insert("slower", "4", 0)
+	r.Insert("tester", "5", 0)
+	r.Insert("team", "6", 0)
+	r.Insert("toast", "7", 0)
+	r.Insert("te", "te", 0)
+	r.Insert("test123/1", "8", 0)
+	r.Insert("test123/2", "9", 0)
+	r.Insert("test123//2", "10", 0)
 
 	l := r.LookupByPrefixAndDelimiter("t", "/", 5, 100, "te")
 	if l.Len() != 4 {
@@ -1000,7 +1000,7 @@ func TestLookupByPrefixAndDelimiter_complex_many(t *testing.T) {
 	start := time.Now()
 	for i := 0; i < count; i++ {
 		key := fmt.Sprintf("2013/%d", i)
-		r.Insert(key, "")
+		r.Insert(key, "", 0)
 		if i%10000 == 0 {
 			print(".")
 		}
@@ -1048,7 +1048,7 @@ func TestLookupByPrefixAndDelimiter_complex_many_bigkey(t *testing.T) {
 	buf := b.String()
 	for i := 0; i < count; i++ {
 		key := fmt.Sprintf("2013/%d", i)
-		r.Insert(key+buf, string(b.Bytes()))
+		r.Insert(key+buf, string(b.Bytes()), 0)
 		if i%10000 == 0 {
 			print(".")
 		}
@@ -1088,14 +1088,14 @@ func TestLookup(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	r.Insert("test", "test")
-	r.Insert("slow", "slow")
-	r.Insert("water", "water")
-	r.Insert("slower", "slower")
-	r.Insert("tester", "tester")
-	r.Insert("team", "team")
-	r.Insert("toast", "toast")
-	r.Insert("te", "te")
+	r.Insert("test", "test", 0)
+	r.Insert("slow", "slow", 0)
+	r.Insert("water", "water", 0)
+	r.Insert("slower", "slower", 0)
+	r.Insert("tester", "tester", 0)
+	r.Insert("team", "team", 0)
+	r.Insert("toast", "toast", 0)
+	r.Insert("te", "te", 0)
 
 	if s := r.Lookup("tester"); s != nil {
 		if string(s) != "tester" {
@@ -1142,14 +1142,14 @@ func TestLookup(t *testing.T) {
 func TestLookupOnDisk(t *testing.T) {
 	r := Open(".")
 
-	r.Insert("test", "test")
-	r.Insert("slow", "slow")
-	r.Insert("water", "water")
-	r.Insert("slower", "slower")
-	r.Insert("tester", "tester")
-	r.Insert("team", "team")
-	r.Insert("toast", "toast")
-	r.Insert("te", "te")
+	r.Insert("test", "test", 0)
+	r.Insert("slow", "slow", 0)
+	r.Insert("water", "water", 0)
+	r.Insert("slower", "slower", 0)
+	r.Insert("tester", "tester", 0)
+	r.Insert("team", "team", 0)
+	r.Insert("toast", "toast", 0)
+	r.Insert("te", "te", 0)
 
 	r.Close()
 
@@ -1203,14 +1203,14 @@ func TestDelete(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	r.Insert("test", "test")
-	r.Insert("slow", "slow")
-	r.Insert("water", "water")
-	r.Insert("slower", "slower")
-	r.Insert("tester", "tester")
-	r.Insert("team", "team")
-	r.Insert("toast", "toast")
-	r.Insert("te", "te")
+	r.Insert("test", "test", 0)
+	r.Insert("slow", "slow", 0)
+	r.Insert("water", "water", 0)
+	r.Insert("slower", "slower", 0)
+	r.Insert("tester", "tester", 0)
+	r.Insert("team", "team", 0)
+	r.Insert("toast", "toast", 0)
+	r.Insert("te", "te", 0)
 
 	if s := r.Delete("tester"); s != nil {
 		if string(s) != "tester" {
@@ -1239,7 +1239,7 @@ func TestDelete(t *testing.T) {
 		t.Errorf("expecting nil found %v", s)
 	}
 
-	r.Insert("team", "tortugas")
+	r.Insert("team", "tortugas", 0)
 	if s := r.Lookup("team"); s != nil {
 		if string(s) != "tortugas" {
 			t.Errorf("expecting %s found %s", "tortugas", s)
@@ -1251,14 +1251,14 @@ func TestPrefix(t *testing.T) {
 	r := Open(".")
 	defer r.Destory()
 
-	r.Insert("test", "test")
-	r.Insert("slow", "slow")
-	r.Insert("water", "water")
-	r.Insert("slower", "slower")
-	r.Insert("tester", "tester")
-	r.Insert("team", "team")
-	r.Insert("toast", "toast")
-	r.Insert("timor", "timor")
+	r.Insert("test", "test", 0)
+	r.Insert("slow", "slow", 0)
+	r.Insert("water", "water", 0)
+	r.Insert("slower", "slower", 0)
+	r.Insert("tester", "tester", 0)
+	r.Insert("team", "team", 0)
+	r.Insert("toast", "toast", 0)
+	r.Insert("timor", "timor", 0)
 
 	l := r.Prefix("t")
 	if l.Len() != 5 {
@@ -1316,7 +1316,7 @@ func TestConcurrent(t *testing.T) {
 
 	for i := 0; i < count; i++ {
 		str := fmt.Sprintf("%d", i)
-		r.Insert(str, str)
+		r.Insert(str, str, 0)
 	}
 
 	goroutineCount := 4
@@ -1379,7 +1379,7 @@ func TestOnDiskDeleteCut(t *testing.T) {
 
 	for i := 0; i < count; i++ {
 		str := fmt.Sprintf("%d", i)
-		r.Insert(str, str)
+		r.Insert(str, str, 0)
 	}
 
 	for i := 0; i < count; i++ {
@@ -1418,7 +1418,7 @@ func TestOnDiskDelete(t *testing.T) {
 
 	for i := 0; i < count; i++ {
 		str := fmt.Sprintf("%d", i)
-		r.Insert(str, str)
+		r.Insert(str, str, 0)
 	}
 
 	for i := 0; i < count; i++ {
@@ -1457,7 +1457,7 @@ func TestCutEdge(t *testing.T) {
 
 	for i := 0; i < count; i++ {
 		str := fmt.Sprintf("%d", i)
-		r.Insert(str, str)
+		r.Insert(str, str, 0)
 	}
 
 	for i := 0; i < count; i++ {
@@ -1497,7 +1497,7 @@ func TestConcurrentReadDelete(t *testing.T) {
 
 	for i := 0; i < count; i++ {
 		str := fmt.Sprintf("%d", i)
-		r.Insert(str, str)
+		r.Insert(str, str, 0)
 	}
 
 	goroutineCount := 5
@@ -1572,7 +1572,7 @@ func TestBackup(t *testing.T) {
 
 	for i := 0; i < count; i++ {
 		str := fmt.Sprintf("%d", i)
-		r.Insert(str, str)
+		r.Insert(str, str, 0)
 	}
 
 	goroutineCount := 5
@@ -1666,7 +1666,7 @@ func TestConcurrentRandomReadWrite(t *testing.T) {
 			}
 
 			str := fmt.Sprintf("%d", i)
-			if b, err := r.Insert(str, str); b != nil || err != nil {
+			if b, err := r.Insert(str, str, 0); b != nil || err != nil {
 				log.Fatal(b, err)
 			}
 		}
@@ -1757,8 +1757,8 @@ func TestSimpleInsert(t *testing.T) {
 
 	runtime.Gosched()
 
-	r.Insert("200", "200")
-	r.Insert("201", "201")
-	r.Insert("0", "0")
+	r.Insert("200", "200", 0)
+	r.Insert("201", "201", 0)
+	r.Insert("0", "0", 0)
 	wg.Wait()
 }
