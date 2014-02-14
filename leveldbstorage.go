@@ -25,7 +25,7 @@ var l sync.Mutex
 func (self *Levelstorage) Open(path string) (err error) {
 	self.wo = leveldb.NewWriteOptions()
 	self.opts = leveldb.NewOptions()
-	self.cache = leveldb.NewLRUCache(100 * 1024 * 1024)
+	self.cache = leveldb.NewLRUCache(1000 * 1024 * 1024)
 	self.opts.SetCache(self.cache)
 
 	self.opts.SetCreateIfMissing(true)

@@ -21,7 +21,7 @@ type radNode struct {
 
 type versionValue struct {
 	Version int64  `json:"ver,omitempty"`
-	Value   string `json:"val,omitempty"`
+	Value   []byte `json:"val,omitempty"`
 }
 
 const (
@@ -227,30 +227,20 @@ func (r *radNode) classicPut(key []byte, vv []byte, internalKey []byte, checkVer
 					return nil, nil
 				}
 
-				if force {
-					d.Value = internalKey
-					orgValue, err := tree.h.GetValueFromStore(d.Value, tree.snapshot)
-					if err != nil {
-						logging.Fatal(err)
-					}
-
-					tree.h.getChildrenByNode(d, tree.snapshot)
-					tree.h.persistentNode(d, vv)
-					return []byte(orgValue.Value), nil
-				}
-
-				//check version
 				orgValue, err := tree.h.GetValueFromStore(d.Value, tree.snapshot)
 				if err != nil {
 					logging.Fatal(err)
 				}
 
+				if force {
+					d.Value = internalKey
+					tree.h.getChildrenByNode(d, tree.snapshot)
+					tree.h.persistentNode(d, vv)
+					return []byte(orgValue.Value), nil
+				}
+
 				if orgValue.Version == checkVersion {
 					d.Value = internalKey
-					orgValue, err := tree.h.GetValueFromStore(d.Value, tree.snapshot)
-					if err != nil {
-						logging.Fatal(err)
-					}
 
 					tree.h.getChildrenByNode(d, tree.snapshot)
 					tree.h.persistentNode(d, vv)

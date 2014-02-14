@@ -5,6 +5,7 @@ import (
 	"github.com/ngaut/logging"
 	//enc "labix.org/v2/mgo/bson"
 	// "bytes"
+	"encoding/binary"
 	enc "encoding/json"
 	"math/rand"
 	"strconv"
@@ -160,6 +161,28 @@ func (self *helper) ResetInMemoryNodeCount() {
 	atomic.StoreInt64(&self.inmemoryNodeCount, 0)
 }
 
+func decodeVV(buf []byte) *versionValue {
+	var vv versionValue
+	// err = enc.Unmarshal(buf, &vv)
+	// if err != nil {
+	// 	logging.Fatal(err)
+	// 	return nil, err
+	// }
+
+	vv.Version = int64(binary.LittleEndian.Uint64(buf))
+	vv.Value = buf[8:]
+
+	return &vv
+}
+
+func encodeVV(vv *versionValue) []byte {
+	buf := make([]byte, 8+len(vv.Value))
+	binary.LittleEndian.PutUint64(buf, uint64(vv.Version))
+	copy(buf[8:], vv.Value)
+
+	return buf
+}
+
 func (self *helper) GetValueFromStore(key []byte, snapshot interface{}) (*versionValue, error) {
 	buf, err := self.store.GetKey(key, snapshot)
 	if err != nil {
@@ -167,14 +190,11 @@ func (self *helper) GetValueFromStore(key []byte, snapshot interface{}) (*versio
 		return nil, err
 	}
 
-	var vv versionValue
-	err = enc.Unmarshal(buf, &vv)
-	if err != nil {
-		logging.Fatal(err)
-		return nil, err
+	if buf == nil {
+		return nil, fmt.Errorf("key %s not exist", string(key))
 	}
 
-	return &vv, nil
+	return decodeVV(buf), nil
 }
 
 func (self *helper) doRead(seq int64, snapshot interface{}) ([]byte, error) {

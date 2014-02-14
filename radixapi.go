@@ -2,7 +2,6 @@ package radix
 
 import (
 	"container/list"
-	enc "encoding/json"
 	"fmt"
 	"github.com/ngaut/logging"
 	"log"
@@ -265,14 +264,10 @@ func (self *Radix) Insert(key string, Value string, version int64) ([]byte, erro
 	}()
 
 	k := []byte(key)
-	vv := &versionValue{Version: version, Value: Value}
+	vv := &versionValue{Version: version, Value: []byte(Value)}
 	internalKey := encodeValueToInternalKey(k)
 
-	buf, err := enc.Marshal(vv)
-	if err != nil {
-		logging.Error(err)
-		return nil, err
-	}
+	buf := encodeVV(vv)
 
 	self.lock.Lock()
 
@@ -302,34 +297,36 @@ func (self *Radix) Insert(key string, Value string, version int64) ([]byte, erro
 
 func (self *Radix) CAS(key string, Value string, version int64, newVersion int64) ([]byte, error) {
 	k := []byte(key)
-	vv := &versionValue{Version: newVersion, Value: Value}
 	internalKey := encodeValueToInternalKey(k)
 
-	buf, err := enc.Marshal(vv)
+	self.lock.Lock()
+	defer self.lock.Unlock()
+
+	vv, err := self.h.GetValueFromStore(internalKey, nil)
 	if err != nil {
-		logging.Error(err)
 		return nil, err
 	}
 
-	self.lock.Lock()
-	defer func() {
-		// self.addNodesCallBack()
-		self.lock.Unlock()
-	}()
+	if len(vv.Value) == 0 {
+		panic("never happend")
+	}
+
+	oldvalue := vv.Value
+
+	if vv.Version != version {
+		return nil, fmt.Errorf("version not match expect %v, you provide %v", vv.Version, version)
+	}
+
+	vv.Version = newVersion
+	vv.Value = []byte(Value)
 
 	self.beginWriteBatch()
-	oldvalue, err := self.Root.put(k, buf, internalKey, version, false, self)
-	if err != nil {
-		logging.Info(err)
-		self.commitWriteBatch()
-		return nil, err
-	}
-
-	err = self.commitWriteBatch()
-	if err != nil {
+	if err = self.h.store.PutKey(internalKey, encodeVV(vv)); err != nil {
+		self.rollback()
 		logging.Fatal(err)
 		return nil, err
 	}
+	self.commitWriteBatch()
 
 	return oldvalue, nil
 }
@@ -379,25 +376,21 @@ func (self *Radix) FindInternalKey(key string) string {
 // Lookup searches for a particular string in the tree.
 func (self *Radix) GetWithVersion(key string) ([]byte, int64) {
 	k := []byte(key)
+	internalKey := encodeValueToInternalKey(k)
+
 	self.lock.RLock()
-	//todo: using internal key to get, no need to call lookup
-	if x, _, ok := self.Root.lookup(k, self); ok && len(x.Value) > 0 {
-		vv, err := self.h.GetValueFromStore(x.Value, self.snapshot)
-		if err != nil {
-			atomic.AddInt64(&self.stats.getFailed, 1)
-			self.lock.RUnlock()
-			return nil, -1
-		}
 
-		atomic.AddInt64(&self.stats.getSuccess, 1)
-
+	vv, err := self.h.GetValueFromStore(internalKey, self.snapshot)
+	if err != nil {
+		atomic.AddInt64(&self.stats.getFailed, 1)
 		self.lock.RUnlock()
-		return []byte(vv.Value), vv.Version
+		return nil, -1
 	}
 
-	atomic.AddInt64(&self.stats.getFailed, 1)
+	atomic.AddInt64(&self.stats.getSuccess, 1)
+
 	self.lock.RUnlock()
-	return nil, -1
+	return []byte(vv.Value), vv.Version
 }
 
 func (self *Radix) LookupByPrefixAndDelimiter(prefix string, delimiter string, limitCount int32, limitLevel int, marker string) *list.List {
