@@ -1,186 +1,868 @@
-// Copyright (c) 2013, J. Salvador Arias <jsalarias@csnat.unt.edu.ar>
-// All rights reserved.
-// Distributed under BSD2 license that can be found in the LICENSE file.
-
-// Package radix implement a radix tree. It is expected that the
-// keys are in UTF-8 (i.e. go runes), and that insertion and lookup
-// is far more common than deletion.
 package radix
 
 import (
+	"bytes"
 	"container/list"
-	"errors"
-	"sync"
+	"fmt"
+	"github.com/ngaut/logging"
+	"math/rand"
+	// "sync"
 )
-
-// Radix is a radix tree.
-type Radix struct {
-	root *radNode   // root of the radix tree
-	lock sync.Mutex // protect the radix
-}
 
 // a node of a radix tree
 type radNode struct {
-	prefix    string      // current prefix of the node
-	desc, sis *radNode    // neighbors of the node
-	value     interface{} // stored value
+	Prefix   []byte // current prefix of the node
+	Children []*radNode
+	Value    []byte // stored key
+	father   *radNode
+	Seq      int64
+	Stat     int64
 }
 
-// New returns a new, empty radix tree.
-func New() *Radix {
-	rad := &Radix{
-		root: &radNode{},
+type versionValue struct {
+	Version int64  `json:"ver,omitempty"`
+	Value   []byte `json:"val,omitempty"`
+}
+
+const (
+	RESULT_COMMON_PREFIX = 0
+	RESULT_CONTENT       = 1
+
+	statInMemory = 0
+	statLoading  = 2
+	statOnDisk   = 4
+)
+
+func (self *Radix) beginWriteBatch() {
+	self.h.store.BeginWriteBatch()
+}
+
+func (self *Radix) commitWriteBatch() error {
+	return self.h.store.CommitWriteBatch()
+}
+
+func (self *Radix) rollback() error {
+	return self.h.store.Rollback()
+}
+
+func (self *Radix) getIndex(n *radNode) int {
+	for i := 0; i < len(n.father.Children); i++ { //get index
+		if n.father.Children[i].Seq == n.Seq {
+			return i
+		}
 	}
-	return rad
+
+	return -1
 }
 
-// Delete removes the value associated with a particular key and returns it.
-func (rad *Radix) Delete(key string) interface{} {
-	rad.lock.Lock()
-	defer rad.lock.Unlock()
-	return rad.root.delete(key)
+func (self *Radix) pathCompression(n *radNode, leaf *radNode) {
+	var latest *radNode
+	// logging.Infof("pathCompression %+v, %+v", n, leaf)
+	if n.Seq == ROOT_SEQ {
+		logging.Infof("persistent %+v", n)
+		self.h.persistentNode(n, nil)
+		return
+	}
+
+	prefix := make([]byte, 0)
+	for n != nil && n.Seq != ROOT_SEQ && len(n.Children) == 1 && len(n.Value) == 0 {
+		latest = n
+		prefix = append(n.Prefix, prefix...)
+		err := self.h.delNodeFromStorage(n.Seq)
+		if err != nil {
+			logging.Fatal(err)
+		}
+		self.h.AddInMemoryNodeCount(-1)
+
+		//cleanup n
+		n = n.father
+	}
+
+	if latest == nil {
+		logging.Infof("persistent %+v", n)
+		self.h.persistentNode(n, nil)
+		return
+	}
+
+	self.h.getChildrenByNode(leaf, self.snapshot) //we need to copy child if leaf is on disk
+
+	err := self.h.delNodeFromStorage(leaf.Seq) //no need to dec inmemory node count, because we reuse it
+	if err != nil {
+		logging.Fatal(err)
+	}
+
+	leaf.Prefix = append(prefix, leaf.Prefix...)
+	leaf.Seq = latest.Seq
+	leaf.father = latest.father
+
+	*latest = *leaf
+	adjustFather(latest)
+
+	// logging.Infof("persistent %+v, %+v", latest.father, latest)
+
+	self.h.persistentNode(latest, nil)
+	self.h.persistentNode(latest.father, nil)
+}
+
+func (self *Radix) deleteNode(n *radNode) {
+	if n.Seq == ROOT_SEQ { //root
+		self.h.persistentNode(n, nil)
+		return
+	}
+
+	// logging.Infof("deleteNode %+v, %+v", n, n.father)
+	//remove from storage
+	if len(n.Value) > 0 {
+		err := self.h.delFromStoragebyKey(n.Value)
+		if err != nil {
+			logging.Fatal(err)
+		}
+		n.Value = nil
+	}
+
+	// logging.Info(n.Seq, n.father.Seq)
+	if len(n.Children) > 1 {
+		// logging.Infof("persistent %+v", n)
+		err := self.h.persistentNode(n, nil)
+		if err != nil {
+			logging.Fatal(err)
+		}
+		err = self.h.persistentNode(n.father, nil)
+		if err != nil {
+			logging.Fatal(err)
+		}
+		return
+	} else if len(n.Children) == 1 {
+		self.pathCompression(n, n.Children[0])
+		return
+	}
+
+	//now, n has no children, check if we need to clean father
+	//todo: binary search
+	i := self.getIndex(n)
+
+	self.h.delNodeFromStorage(n.Seq)
+	self.h.AddInMemoryNodeCount(-1)
+
+	//n is leaf node
+	if len(n.father.Children) > 1 {
+		n.father.Children[i] = nil
+		if i == len(n.father.Children)-1 { //last one
+			n.father.Children = n.father.Children[:i]
+		} else {
+			n.father.Children = append(n.father.Children[:i], n.father.Children[i+1:]...)
+		}
+
+		if len(n.father.Children) == 1 { //if there is only node after remove, we can do combine
+			self.pathCompression(n.father, n.father.Children[0])
+			return
+		}
+
+		self.h.persistentNode(n.father, nil)
+	} else if len(n.father.Children) == 1 {
+		n.father.Children[0] = nil
+		n.father.Children = nil
+
+		if len(n.father.Value) == 0 {
+			// logging.Info("recursive delete")
+			self.deleteNode(n.father) //recursive find & delete
+		} else {
+			// logging.Infof("persistent %+v, %d", n.father, len(n.father.Value))
+			self.h.persistentNode(n.father, nil)
+		}
+	} else {
+		panic("never happend")
+	}
 }
 
 // implements delete
-func (r *radNode) delete(key string) interface{} {
-	if x, ok := r.lookup(key); ok {
-		val := x.value
-		// only assign a nil, therefore skip any modification
-		// of the radix topology
-		x.value = nil
-		return val
+func (r *radNode) delete(key []byte, tree *Radix) []byte {
+	if x, _, ok := r.lookup(key, tree); ok && len(x.Value) > 0 {
+		v, err := tree.h.GetValueFromStore(x.Value, tree.snapshot)
+		if err != nil {
+			logging.Fatal("never happend")
+		}
+
+		// logging.Debugf("delete %s father %+v", key, x.father)
+		// logging.Infof("delete %v father %v", x.Seq, father.Seq)
+
+		tree.deleteNode(x)
+
+		return []byte(v.Value)
 	}
+
 	return nil
 }
 
-// Insert put a value in the radix. It returns an error if the given key
-// is already in use.
-func (rad *Radix) Insert(key string, value interface{}) error {
-	rad.lock.Lock()
-	defer rad.lock.Unlock()
-	return rad.root.insert(key, value)
+func (r *radNode) put(key []byte, vv []byte, internalKey []byte, version int64, force bool, tree *Radix) ([]byte, error) {
+	return r.classicPut(key, vv, internalKey, version, force, tree)
+	// return r.concurrentPut(key, vv, internalKey, version, force, tree)
+	// return r.combinePut(key, vv, internalKey, version, force, tree)
+
 }
 
-// implements insert
-func (r *radNode) insert(key string, value interface{}) error {
-	for d := r.desc; d != nil; d = d.sis {
-		comm := common(key, d.prefix)
+// implements insert or replace, return nil, nil if this a new value
+func (r *radNode) classicPut(key []byte, vv []byte, internalKey []byte, checkVersion int64, force bool, tree *Radix) ([]byte, error) {
+	//logging.Info("insert", internalKey, "--", string(Value), r.Prefix)
+
+	tree.h.getChildrenByNode(r, tree.snapshot)
+
+	for _, d := range r.Children {
+		// tree.h.getChildrenByNode(d)
+		if len(d.Prefix) == 0 { //check
+			panic("never happend")
+		}
+
+		comm := common(key, d.Prefix)
 		if len(comm) == 0 {
 			continue
 		}
+
 		if len(comm) == len(key) {
-			if len(comm) == len(d.prefix) {
-				if d.value == nil {
-					d.value = value
-					return nil
+			if len(comm) == len(d.Prefix) {
+				if len(d.Value) == 0 {
+					d.Value = internalKey
+					tree.h.getChildrenByNode(d, tree.snapshot)
+					tree.h.persistentNode(d, vv) //todo: children seq not changed
+					return nil, nil
 				}
-				return errors.New("key already in use")
+
+				orgValue, err := tree.h.GetValueFromStore(d.Value, tree.snapshot)
+				if err != nil {
+					logging.Fatal(err)
+				}
+
+				if force {
+					d.Value = internalKey
+					tree.h.getChildrenByNode(d, tree.snapshot)
+					tree.h.persistentNode(d, vv)
+					return []byte(orgValue.Value), nil
+				}
+
+				if orgValue.Version == checkVersion {
+					d.Value = internalKey
+
+					tree.h.getChildrenByNode(d, tree.snapshot)
+					tree.h.persistentNode(d, vv)
+					return []byte(orgValue.Value), nil
+				}
+
+				// logging.Infof("version not match, version is %d, but you provide %d, %+v", d.Version, version, d)
+				return nil, fmt.Errorf("key: %s, version not match, version is %d, but you provide %d, %+v", internalKey, orgValue.Version, checkVersion, d)
 			}
+
+			tree.h.getChildrenByNode(d, tree.snapshot)
+
+			//ex: ab, insert a
 			n := &radNode{
-				prefix: d.prefix[len(comm):],
-				value:  d.value,
-				desc:   d.desc,
+				Prefix:   cloneByteSlice(d.Prefix[len(comm):]),
+				Value:    d.Value,
+				father:   d,
+				Children: d.Children,
+				Seq:      tree.h.allocSeq(),
 			}
-			d.desc = n
-			d.prefix = comm
-			d.value = value
-			return nil
+			//adjust father
+			adjustFather(n)
+			tree.h.AddInMemoryNodeCount(1)
+			tree.h.persistentNode(n, nil)
+
+			d.Children = make([]*radNode, 1, 1)
+			d.Children[0] = n
+			d.Prefix = []byte(comm) //no need to clone, we can reuse comm
+			d.Value = internalKey
+			tree.h.persistentNode(d, vv)
+			return nil, nil
 		}
-		if len(comm) == len(d.prefix) {
-			return d.insert(key[len(comm):], value)
+
+		//ex: a, insert ab
+		if len(comm) == len(d.Prefix) {
+			return d.put(key[len(comm):], vv, internalKey, checkVersion, force, tree)
 		}
+
+		tree.h.getChildrenByNode(d, tree.snapshot)
+
+		//ex: ab, insert ac, extra common a
 		p := &radNode{
-			prefix: d.prefix[len(comm):],
-			value:  d.value,
-			desc:   d.desc,
+			Prefix:   cloneByteSlice(d.Prefix[len(comm):]),
+			Value:    d.Value,
+			father:   d,
+			Children: d.Children,
+			Seq:      tree.h.allocSeq(),
 		}
+		//adjust father
+		adjustFather(p)
+
+		tree.h.persistentNode(p, nil)
 		n := &radNode{
-			prefix: key[len(comm):],
-			value:  value,
+			Prefix: cloneByteSlice(key[len(comm):]),
+			Value:  internalKey,
+			father: d,
+			Seq:    tree.h.allocSeq(),
 		}
-		d.prefix = comm
-		p.sis = n
-		d.desc = p
-		d.value = nil
+		tree.h.AddInMemoryNodeCount(2)
+
+		tree.h.persistentNode(n, vv)
+
+		d.Prefix = []byte(comm) //no need to clone, we can reuse comm
+		d.Value = nil
+		d.Children = make([]*radNode, 2, 2)
+		d.Children[0] = p
+		d.Children[1] = n
+
+		tree.h.persistentNode(d, nil)
+		return nil, nil
+	}
+
+	n := &radNode{
+		Prefix: cloneByteSlice(key),
+		Value:  internalKey,
+		father: r,
+		Seq:    tree.h.allocSeq(),
+	}
+	tree.h.AddInMemoryNodeCount(1)
+	tree.h.persistentNode(n, vv)
+	r.Children = append(r.Children, n)
+	tree.h.persistentNode(r, nil)
+
+	return nil, nil
+}
+
+// implements insert or replace, return nil, nil if this a new value
+// func (r *radNode) combinePut(key []byte, vv *versionValue, internalKey []byte, version int64, force bool, tree *Radix) ([]byte, error) {
+// 	// logging.Info("insert", internalKey, "--", string(Value), r.Prefix)
+
+// 	tree.h.getChildrenByNode(r, tree.snapshot)
+
+// 	for _, d := range r.Children {
+// 		// tree.h.getChildrenByNode(d)
+// 		if len(d.Prefix) == 0 { //check
+// 			panic("never happend")
+// 		}
+
+// 		comm := common(key, d.Prefix)
+// 		if len(comm) == 0 {
+// 			continue
+// 		}
+
+// 		if len(comm) == len(key) {
+// 			if len(comm) == len(d.Prefix) {
+// 				if len(d.Value) == 0 {
+// 					d.Value = internalKey
+// 					tree.h.getChildrenByNode(d, tree.snapshot)
+// 					tree.h.persistentNode(d, Value) //todo: children seq not changed
+// 					return nil, nil
+// 				}
+
+// 				if force || version == d.Version {
+// 					d.Value = internalKey
+// 					orgValue, err := tree.h.GetValueFromStore(d.Value, tree.snapshot)
+// 					if err != nil {
+// 						logging.Fatal(err)
+// 					}
+// 					d.Version++
+// 					tree.h.getChildrenByNode(d, tree.snapshot)
+// 					tree.h.persistentNode(d, Value) //todo: children seq not changed
+// 					return orgValue, nil
+// 				}
+
+// 				// logging.Infof("version not match, version is %d, but you provide %d, %+v", d.Version, version, d)
+// 				return nil, fmt.Errorf("key: %s, version not match, version is %d, but you provide %d, %+v", internalKey, d.Version, version, d)
+// 			}
+
+// 			tree.h.getChildrenByNode(d, tree.snapshot)
+
+// 			//ex: ab, insert a
+// 			n := &radNode{
+// 				Prefix:   cloneByteSlice(d.Prefix[len(comm):]),
+// 				Value:    d.Value,
+// 				father:   d,
+// 				Children: d.Children,
+// 				Seq:      tree.h.allocSeq(),
+// 			}
+// 			//adjust father
+// 			adjustFather(n)
+
+// 			tree.h.persistentNode(n, nil)
+
+// 			d.Children = make([]*radNode, 1, 1)
+// 			d.Children[0] = n
+// 			d.Prefix = []byte(comm) //no need to clone, we can reuse comm
+// 			d.Value = internalKey
+// 			tree.h.persistentNode(d, Value)
+// 			tree.h.AddInMemoryNodeCount(1)
+
+// 			return nil, nil
+// 		}
+
+// 		//ex: a, insert ab
+// 		if len(comm) == len(d.Prefix) {
+// 			return d.put(key[len(comm):], Value, internalKey, version, force, tree)
+// 		}
+
+// 		tree.h.getChildrenByNode(d, tree.snapshot)
+
+// 		//ex: ab, insert ac, extra common a
+// 		p := &radNode{
+// 			Prefix:   cloneByteSlice(d.Prefix[len(comm):]),
+// 			Value:    d.Value,
+// 			father:   d,
+// 			Children: d.Children,
+// 			Seq:      tree.h.allocSeq(),
+// 		}
+
+// 		wg := sync.WaitGroup{}
+// 		wg.Add(2)
+// 		tree.h.asyncPersistent(&persistentArg{n: p, value: nil, wg: &wg})
+
+// 		n := &radNode{
+// 			Prefix: cloneByteSlice(key[len(comm):]),
+// 			Value:  internalKey,
+// 			father: d,
+// 			Seq:    tree.h.allocSeq(),
+// 		}
+
+// 		tree.h.asyncPersistent(&persistentArg{n: n, value: Value, wg: &wg})
+
+// 		//adjust father, move to here to make it faster
+// 		adjustFather(p)
+
+// 		d.Prefix = []byte(comm) //no need to clone, we can reuse comm
+// 		d.Value = nil
+// 		d.Children = make([]*radNode, 2, 2)
+// 		d.Children[0] = p
+// 		d.Children[1] = n
+
+// 		tree.h.persistentNode(d, nil)
+// 		tree.h.AddInMemoryNodeCount(2)
+// 		wg.Wait()
+// 		return nil, nil
+// 	}
+
+// 	n := &radNode{
+// 		Prefix: cloneByteSlice(key),
+// 		Value:  internalKey,
+// 		father: r,
+// 		Seq:    tree.h.allocSeq(),
+// 	}
+
+// 	tree.h.persistentNode(n, Value)
+
+// 	r.Children = append(r.Children, n)
+// 	tree.h.persistentNode(r, nil)
+// 	tree.h.AddInMemoryNodeCount(1)
+
+// 	return nil, nil
+// }
+
+// implements insert or replace, return nil, nil if this a new value
+// func (r *radNode) concurrentPut(key []byte, Value []byte, internalKey []byte, version int64, force bool, tree *Radix) ([]byte, error) {
+// 	// logging.Info("insert", internalKey, "--", string(Value), r.Prefix)
+
+// 	tree.h.getChildrenByNode(r, tree.snapshot)
+
+// 	for _, d := range r.Children {
+// 		// tree.h.getChildrenByNode(d)
+// 		if len(d.Prefix) == 0 { //check
+// 			panic("never happend")
+// 		}
+
+// 		comm := common(key, d.Prefix)
+// 		if len(comm) == 0 {
+// 			continue
+// 		}
+
+// 		if len(comm) == len(key) {
+// 			if len(comm) == len(d.Prefix) {
+// 				if len(d.Value) == 0 {
+// 					d.Value = internalKey
+// 					tree.h.getChildrenByNode(d, tree.snapshot)
+// 					tree.h.persistentNode(d, Value) //todo: children seq not changed
+// 					return nil, nil
+// 				}
+
+// 				if force || version == d.Version {
+// 					d.Value = internalKey
+// 					orgValue, err := tree.h.GetValueFromStore(d.Value, tree.snapshot)
+// 					if err != nil {
+// 						logging.Fatal(err)
+// 					}
+// 					d.Version++
+// 					tree.h.getChildrenByNode(d, tree.snapshot)
+// 					tree.h.persistentNode(d, Value) //todo: children seq not changed
+// 					return orgValue, nil
+// 				}
+
+// 				// logging.Infof("version not match, version is %d, but you provide %d, %+v", d.Version, version, d)
+// 				return nil, fmt.Errorf("key: %s, version not match, version is %d, but you provide %d, %+v", internalKey, d.Version, version, d)
+// 			}
+
+// 			tree.h.getChildrenByNode(d, tree.snapshot)
+
+// 			//ex: ab, insert a
+// 			n := &radNode{
+// 				Prefix:   cloneByteSlice(d.Prefix[len(comm):]),
+// 				Value:    d.Value,
+// 				father:   d,
+// 				Children: d.Children,
+// 				Seq:      tree.h.allocSeq(),
+// 			}
+
+// 			wg := sync.WaitGroup{} //todo: using len(key) && len(children) to decide either using single thread or multithread
+// 			wg.Add(1)
+// 			tree.h.asyncPersistent(&persistentArg{n: n, value: nil, wg: &wg})
+// 			// tree.h.persistentNode(n, nil)
+
+// 			//adjust father
+// 			adjustFather(n)
+
+// 			d.Children = make([]*radNode, 1, 1)
+// 			d.Children[0] = n
+// 			d.Prefix = []byte(comm) //no need to clone, we can reuse comm
+// 			d.Value = internalKey
+// 			tree.h.persistentNode(d, Value)
+// 			tree.h.AddInMemoryNodeCount(1)
+// 			wg.Wait()
+// 			return nil, nil
+// 		}
+
+// 		//ex: a, insert ab
+// 		if len(comm) == len(d.Prefix) {
+// 			return d.put(key[len(comm):], Value, internalKey, version, force, tree)
+// 		}
+
+// 		tree.h.getChildrenByNode(d, tree.snapshot)
+
+// 		//ex: ab, insert ac, extra common a
+// 		p := &radNode{
+// 			Prefix:   cloneByteSlice(d.Prefix[len(comm):]),
+// 			Value:    d.Value,
+// 			father:   d,
+// 			Children: d.Children,
+// 			Seq:      tree.h.allocSeq(),
+// 		}
+
+// 		wg := sync.WaitGroup{}
+// 		wg.Add(2)
+// 		tree.h.asyncPersistent(&persistentArg{n: p, value: nil, wg: &wg})
+
+// 		n := &radNode{
+// 			Prefix: cloneByteSlice(key[len(comm):]),
+// 			Value:  internalKey,
+// 			father: d,
+// 			Seq:    tree.h.allocSeq(),
+// 		}
+
+// 		tree.h.asyncPersistent(&persistentArg{n: n, value: Value, wg: &wg})
+
+// 		//adjust father
+// 		adjustFather(p)
+
+// 		d.Prefix = []byte(comm) //no need to clone, we can reuse comm
+// 		d.Value = nil
+// 		d.Children = make([]*radNode, 2, 2)
+// 		d.Children[0] = p
+// 		d.Children[1] = n
+
+// 		tree.h.persistentNode(d, nil)
+// 		tree.h.AddInMemoryNodeCount(2)
+// 		wg.Wait()
+// 		return nil, nil
+// 	}
+
+// 	n := &radNode{
+// 		Prefix: cloneByteSlice(key),
+// 		Value:  internalKey,
+// 		father: r,
+// 		Seq:    tree.h.allocSeq(),
+// 	}
+
+// 	wg := sync.WaitGroup{}
+// 	wg.Add(1)
+// 	tree.h.asyncPersistent(&persistentArg{n: n, value: Value, wg: &wg})
+// 	// tree.h.persistentNode(n, Value)
+
+// 	r.Children = append(r.Children, n)
+// 	tree.h.persistentNode(r, nil)
+// 	tree.h.AddInMemoryNodeCount(1)
+// 	wg.Wait()
+
+// 	return nil, nil
+// }
+
+func (r *radNode) addToList(l *list.List, tree *Radix) {
+	tree.h.getChildrenByNode(r, tree.snapshot)
+
+	// logging.Infof("checking %+v", r)
+	if len(r.Value) > 0 {
+		// logging.Info("push", r.Value)
+		l.PushBack(decodeValueToKey(string(r.Value)))
+	}
+	for _, d := range r.Children {
+		d.addToList(l, tree)
+	}
+}
+
+type Tuple struct {
+	Key   string
+	Value string
+	Type  int
+}
+
+func getWholePrefix(n *radNode, offset int) string {
+	var prefix string
+	x := n
+	for n != nil && n.father != nil {
+		prefix = string(n.father.Prefix) + prefix
+		n = n.father
+	}
+
+	return prefix + string(x.Prefix[:offset])
+}
+
+//return: false if full
+func save(l *list.List, limitCount int32, currentCount *int32, n *radNode, offset int, tp int, inc bool) bool {
+	if inc {
+		if *currentCount >= limitCount {
+			// logging.Debug("full")
+			return false
+		}
+	}
+
+	if n.Seq != ROOT_SEQ {
+		// logging.Debug("save", getWholePrefix(n), n.Value)
+		l.PushBack(&Tuple{Key: getWholePrefix(n, offset), Value: string(n.Value), Type: tp})
+		if inc {
+			*currentCount += 1
+		}
+	}
+
+	return true
+}
+
+func (r *radNode) match(delimiter []byte, limitCount int32, limitLevel int, currentCount *int32, tree *Radix, l *list.List) (goon bool) {
+	// logging.Info("checking", r.Prefix, "delimiter", delimiter, "value", r.Value)
+	if offset := bytes.Index(r.Prefix, delimiter); len(delimiter) > 0 && offset >= 0 {
+		// logging.Info("delimiter", delimiter, "found")
+		save(l, limitCount, currentCount, r, offset+1, RESULT_COMMON_PREFIX, true)
+		return false
+	}
+
+	if len(r.Value) > 0 { //leaf node
+		ok := save(l, limitCount, currentCount, r, len(r.Prefix), RESULT_CONTENT, true)
+		if len(r.Children) == 0 || !ok {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (r *radNode) listByPrefixDelimiterMarker(skipRoot bool, delimiter []byte, limitCount int32, limitLevel int, currentCount *int32, tree *Radix, l *list.List) {
+	// logging.Info("level", limitLevel)
+
+	tree.h.getChildrenByNode(r, tree.snapshot)
+
+	//search root first
+	if !skipRoot {
+		goon := r.match(delimiter, limitCount, limitLevel, currentCount, tree, l)
+		if !goon {
+			return
+		}
+	}
+
+	for _, d := range r.Children {
+		//leaf or prefix include delimiter
+		tree.h.getChildrenByNode(d, tree.snapshot)
+
+		goon := d.match(delimiter, limitCount, limitLevel, currentCount, tree, l)
+		if !goon {
+			continue
+		}
+
+		for _, c := range d.Children {
+			c.listByPrefixDelimiterMarker(false, delimiter, limitCount, limitLevel+1, currentCount, tree, l)
+		}
+	}
+}
+
+func (r *radNode) cloneChildrenSeq() []int64 {
+	if len(r.Children) == 0 {
 		return nil
 	}
-	n := &radNode{
-		prefix: key,
-		value:  value,
-		sis:    r.desc,
+
+	nodes := make([]int64, len(r.Children), len(r.Children))
+	for i, d := range r.Children {
+		nodes[i] = d.Seq
 	}
-	r.desc = n
-	return nil
+
+	return nodes
 }
 
-// Lookup searches for a particular string in the tree.
-func (rad *Radix) Lookup(key string) interface{} {
-	rad.lock.Lock()
-	defer rad.lock.Unlock()
-	if x, ok := rad.root.lookup(key); ok {
-		return x.value
-	}
-	return nil
-}
+// implementats lookup: node, index, exist
+func (r *radNode) lookup(key []byte, tree *Radix) (*radNode, int, bool) {
+	tree.h.getChildrenByNode(r, tree.snapshot)
 
-// Prefix returns a list of elements that share a given prefix.
-func (rad *Radix) Prefix(prefix string) *list.List {
-	rad.lock.Lock()
-	defer rad.lock.Unlock()
-	l := list.New()
-	n, _ := rad.root.lookup(prefix)
-	if n == nil {
-		return l
+	if len(key) == 0 {
+		return tree.Root, -1, false
 	}
-	n.addToList(l)
-	return l
-}
 
-// add the content of a node and its descendants to a list
-func (r *radNode) addToList(l *list.List) {
-	if r.value != nil {
-		l.PushBack(r.value)
-	}
-	for d := r.desc; d != nil; d = d.sis {
-		d.addToList(l)
-	}
-}
+	// logging.Infof("lookup %s, %+v", key, r)
 
-// implementats lookup
-func (r *radNode) lookup(key string) (*radNode, bool) {
-	for d := r.desc; d != nil; d = d.sis {
-		comm := common(key, d.prefix)
+	for i, d := range r.Children {
+		// tree.h.getChildrenByNode(d)
+
+		// logging.Infof("lookup %s, %+v", key, d)
+
+		comm := common(key, d.Prefix)
 		if len(comm) == 0 {
 			continue
 		}
+
 		// The key is found
 		if len(comm) == len(key) {
-			if len(comm) == len(d.prefix) {
-				return d, true
+			tree.h.getChildrenByNode(d, tree.snapshot)
+			// logging.Infof("found %+v", d)
+			if len(comm) == len(d.Prefix) {
+				return d, i, true
 			}
-			return d, false
+			return d, i, false
 		}
-		return d.lookup(key[len(comm):])
+
+		return d.lookup(key[len(comm):], tree)
 	}
-	return nil, false
+	return nil, 0, false
 }
 
-// return the common string
-func common(s, o string) string {
-	max, min := s, o
-	if len(max) < len(min) {
-		max, min = min, max
+func getInMemChildrenCount(n *radNode, cnt *int) { //including root
+	*cnt++
+	if onDisk(n) {
+		return
 	}
-	var str []rune
-	for i, r := range min {
-		if r != rune(max[i]) {
+
+	for _, c := range n.Children {
+		getInMemChildrenCount(c, cnt)
+	}
+}
+
+func onDisk(n *radNode) bool {
+	return n.Stat == statOnDisk
+}
+
+func setOnDisk(n *radNode) {
+	n.Stat = statOnDisk
+	n.Children = nil
+}
+
+func cutAll(n *radNode, tree *Radix) int {
+	setOnDisk(n)
+
+	cnt := -1 * int(tree.h.GetInMemoryNodeCount())
+	tree.h.AddInMemoryNodeCount(cnt)
+	return cnt
+}
+
+// func randomCut(n *radNode, tree *Radix) (retry bool) {
+// 	target := rand.Intn(len(n.Children))
+
+// 	if onDisk(n.Children[target]) || len(n.Children[target].Children) == 0 {
+// 		return true
+// 	}
+
+// 	// sum := 0
+// 	// for _, c := range n.Children {
+// 	// 	childrenCnt := 0
+// 	// 	getInMemChildrenCount(c, &childrenCnt)
+// 	// 	logging.Debugf("prefix %s, children count %d", c.Prefix, childrenCnt)
+// 	// 	sum += childrenCnt
+// 	// }
+
+// 	// //check status
+// 	// if int64(sum) != tree.h.GetInMemoryNodeCount() {
+// 	// 	// tree.h.DumpMemNode(tree.Root, 0)
+// 	// 	logging.Errorf("sum: %d, max: %d, InMemoryNodeCount %d", sum, tree.MaxInMemoryNodeCount, tree.h.GetInMemoryNodeCount())
+// 	// 	panic("")
+// 	// }
+
+// 	//get children count
+// 	childrenCnt := 0
+// 	getInMemChildrenCount(n.Children[target], &childrenCnt)
+// 	if childrenCnt > 1 {
+// 		logging.Debugf("inmemory: %d, cut prefix %s, childrenCnt %d, father children count %d", tree.h.GetInMemoryNodeCount(),
+// 			n.Children[target].Prefix, childrenCnt, len(n.Children))
+// 		setOnDisk(n.Children[target])
+// 		tree.h.AddInMemoryNodeCount(-childrenCnt + 1) //exclude root node
+// 		return false
+// 	}
+
+// 	return true
+// }
+
+func randomCut(n *radNode, tree *Radix, level int) (retry bool) {
+	target := rand.Intn(len(n.Children))
+
+	if onDisk(n.Children[target]) || len(n.Children[target].Children) == 0 {
+		return true
+	}
+
+	if len(n.Children[target].Children) == 1 {
+		return randomCut(n.Children[target], tree, level) //go deeper
+	}
+
+	if level > 0 {
+		return randomCut(n.Children[target], tree, level-1)
+	}
+
+	//get children count
+	childrenCnt := 0
+	getInMemChildrenCount(n.Children[target], &childrenCnt)
+	if childrenCnt > 1 {
+		logging.Debugf("inmemory: %d, cut prefix %s, childrenCnt %d, father children count %d", tree.h.GetInMemoryNodeCount(),
+			n.Children[target].Prefix, childrenCnt, len(n.Children))
+		setOnDisk(n.Children[target])
+		tree.h.AddInMemoryNodeCount(-childrenCnt + 1) //exclude root node
+		return false
+	}
+
+	return true
+}
+
+func doRandomCut(n *radNode, tree *Radix) int {
+	befortCut := tree.h.GetInMemoryNodeCount()
+	level := 3
+	if befortCut > 2*tree.MaxInMemoryNodeCount {
+		level = 2
+	}
+
+	if befortCut > 3*tree.MaxInMemoryNodeCount {
+		level = 1
+	}
+
+	if befortCut > 5*tree.MaxInMemoryNodeCount {
+		level = 0
+	}
+
+	for i := 0; i < 5; i++ { //max try
+		if retry := randomCut(n, tree, level); !retry {
 			break
 		}
-		if str == nil {
-			str = []rune{r}
-		} else {
-			str = append(str, r)
-		}
+		logging.Debug("retry")
 	}
-	return string(str)
+	afterCut := tree.h.GetInMemoryNodeCount()
+
+	return int(afterCut - befortCut)
+}
+
+//remove this tree's children from memory, only cut leaf node
+func cutEdge(n *radNode, tree *Radix) int {
+	if n == nil || onDisk(n) || len(n.Children) == 0 {
+		return 0
+	}
+
+	return doRandomCut(n, tree) //cutAll(n, tree)
+}
+
+func adjustFather(n *radNode) {
+	for _, child := range n.Children {
+		child.father = n
+	}
 }
