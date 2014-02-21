@@ -6,6 +6,101 @@ package radix
 
 import "testing"
 
+// added from https://github.com/ngaut/radix
+func TestCommon(t *testing.T) {
+	stri := []rune("几个大盘那/个好")
+	stri2 := []rune("几个大盘那/个好代码规范咖啡店老")
+	stri4 := []rune("abcd")
+	stri5 := []rune("abcd7")
+	str6 := []rune("123/")
+	str7 := []rune("123/456")
+	str8 := []rune("abc哈124")
+	str9 := []rune("aBc哈124而899")
+	str10 := []rune("aBc哈124而89")
+	str11 := []rune("aBc哈124*/&环境lk")
+	str12 := []rune("aBc哈124*/&环境lk34lk")
+	str13 := []rune("/#&*lk$@!plk0987738")
+	str14 := []rune("/#&*lk$@!plk0987738344/098jk")
+	str15 := []rune("fdja&&^%^002fdkajdk中就嗲司机93y388327")
+	str16 := []rune("fdja&&^%^002fdkajdk中就嗲司机93bfdsau")
+	str17 := []rune("$^89()dja&&^%^002fdkajdk中就嗲司机93好y388327")
+	str18 := []rune("$^89()ja&&^%^002fdkajdk中就嗲司机93好fdsau")
+	str19 := []rune("0299381000099988/HJDJDJJ&&&90()-=122:><发到你看范德萨接口接口大家看")
+	str20 := []rune("0299381000099988/HJDJDJJ&&&90()-=122:><fdnfiahfihuiahif")
+	str21 := []rune("搭建积分地撒谎ifh**&&&………………————+：；》《MKKKKKK*分阶段看 发动机类似就fdhdshfnhfkdjshkfh")
+	str22 := []rune("搭建积分地撒谎ifh**&&&………………————+：；》《MKKKKKK*分阶段看 发动机类似就飞机哦司机你（98人")
+	str23 := []rune("    ()(*&&^^^^%%$$##!!!~@#$^&*((?>><??搭建积分地撒谎ifh**&&&………………————+：；》《MKKKKKK*分阶段看 发动机类似就fdhdshfnhfkdjshkfh")
+	str24 := []rune("    ()(*&&^^^^%%$$##!!!~@#$^&*((?>><??搭建积分地撒谎ifh**&&&………………————+：；》《MKKKKKK*分阶段看 发动机类似就飞机哦司机你（98人")
+
+	comStr := common(stri, stri2)
+	if string(comStr) != "几个大盘那/个好" {
+		t.Error(comStr)
+		t.Fail()
+	}
+	comStr1 := common(stri4, stri5)
+	if string(comStr1) != "abcd" {
+		t.Error(comStr1)
+		t.Fail()
+	}
+	comStr2 := common(str6, str7)
+	if string(comStr2) != "123/" {
+		t.Error(comStr2)
+		t.Fail()
+	}
+	comStr3 := common(str8, str9)
+	if string(comStr3) != "a" {
+		t.Error(comStr3)
+		t.Fail()
+	}
+
+	comStr4 := common(str10, str9)
+	if string(comStr4) != "aBc哈124而89" {
+		t.Error(comStr4)
+		t.Fail()
+	}
+
+	comStr5 := common(str11, str12)
+	if string(comStr5) != "aBc哈124*/&环境lk" {
+		t.Error(comStr5)
+		t.Fail()
+	}
+
+	comStr6 := common(str13, str14)
+	if string(comStr6) != "/#&*lk$@!plk0987738" {
+		t.Error(comStr6)
+		t.Fail()
+	}
+	comStr7 := common(str15, str16)
+	if string(comStr7) != "fdja&&^%^002fdkajdk中就嗲司机93" {
+		t.Error(comStr7)
+		t.Fail()
+	}
+	comStr8 := common(str17, str18)
+	if string(comStr8) != "$^89()" {
+		t.Error(comStr8)
+		t.Fail()
+	}
+
+	comStr9 := common(str19, str20)
+	if string(comStr9) != "0299381000099988/HJDJDJJ&&&90()-=122:><" {
+		t.Error(comStr9)
+		t.Fail()
+	}
+
+	comStr10 := common(str21, str22)
+	if string(comStr10) != "搭建积分地撒谎ifh**&&&………………————+：；》《MKKKKKK*分阶段看 发动机类似就" {
+		t.Error(comStr10)
+		t.Fail()
+	}
+
+	comStr11 := common(str23, str24)
+	if string(comStr11) != "    ()(*&&^^^^%%$$##!!!~@#$^&*((?>><??搭建积分地撒谎ifh**&&&………………————+：；》《MKKKKKK*分阶段看 发动机类似就" {
+		t.Error(comStr11)
+		t.Fail()
+	}
+
+}
+
 func TestInsertion(t *testing.T) {
 	r := New()
 	r.Insert("test", "test")
