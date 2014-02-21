@@ -12,19 +12,19 @@ func TestInsertion(t *testing.T) {
 	r.Insert("slow", "slow")
 	r.Insert("water", "water")
 	for d := r.root.desc; d != nil; d = d.sis {
-		if v := d.value.(string); v != d.prefix {
+		if v := d.value.(string); v != string(d.prefix) {
 			t.Errorf("d.value = %s, want %s", v, d.prefix)
 		}
 	}
 	r.Insert("slower", "slower")
 	for d := r.root.desc; d != nil; d = d.sis {
-		if d.prefix != "slow" {
+		if string(d.prefix) != "slow" {
 			continue
 		}
 		if v := d.value.(string); v != "slow" {
 			t.Errorf("d.value = %s, want %s", v, d.prefix)
 		}
-		if d.desc.prefix == "er" {
+		if string(d.desc.prefix) == "er" {
 			if v := d.desc.value.(string); v != "slower" {
 				t.Errorf("d.desc.value = %s, want %s", v, "slower")
 			}
@@ -36,13 +36,13 @@ func TestInsertion(t *testing.T) {
 	r.Insert("tester", "tester")
 	var ok bool
 	for d := r.root.desc; d != nil; d = d.sis {
-		if d.prefix == "te" {
+		if string(d.prefix) == "te" {
 			if v, ok := d.value.(string); ok {
 				t.Errorf("d.value = %s, want nil", v)
 			}
 			ok = true
 			for n := d.desc; n != nil; n = n.sis {
-				switch v := n.value.(string); n.prefix {
+				switch v := n.value.(string); string(n.prefix) {
 				case "am":
 					if v != "team" {
 						t.Errorf("n.value = %s, want %s", v, "team")
@@ -67,7 +67,7 @@ func TestInsertion(t *testing.T) {
 	r.Insert("te", "te")
 	ok = false
 	for d := r.root.desc; d != nil; d = d.sis {
-		if d.prefix == "te" {
+		if string(d.prefix) == "te" {
 			v := d.value.(string)
 			if v != "te" {
 				t.Errorf("d.value = %s, want %s", v, "te")

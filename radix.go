@@ -21,7 +21,7 @@ type Radix struct {
 
 // a node of a radix tree
 type radNode struct {
-	prefix    string      // current prefix of the node
+	prefix    []rune      // current prefix of the node
 	desc, sis *radNode    // neighbors of the node
 	value     interface{} // stored value
 }
@@ -38,11 +38,11 @@ func New() *Radix {
 func (rad *Radix) Delete(key string) interface{} {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
-	return rad.root.delete(key)
+	return rad.root.delete([]rune(key))
 }
 
 // implements delete
-func (r *radNode) delete(key string) interface{} {
+func (r *radNode) delete(key []rune) interface{} {
 	if x, ok := r.lookup(key); ok {
 		val := x.value
 		// only assign a nil, therefore skip any modification
@@ -58,11 +58,11 @@ func (r *radNode) delete(key string) interface{} {
 func (rad *Radix) Insert(key string, value interface{}) error {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
-	return rad.root.insert(key, value)
+	return rad.root.insert([]rune(key), value)
 }
 
 // implements insert
-func (r *radNode) insert(key string, value interface{}) error {
+func (r *radNode) insert(key []rune, value interface{}) error {
 	for d := r.desc; d != nil; d = d.sis {
 		comm := common(key, d.prefix)
 		if len(comm) == 0 {
@@ -77,10 +77,11 @@ func (r *radNode) insert(key string, value interface{}) error {
 				return errors.New("key already in use")
 			}
 			n := &radNode{
-				prefix: d.prefix[len(comm):],
+				prefix: make([]rune, len(d.prefix)-len(comm)),
 				value:  d.value,
 				desc:   d.desc,
 			}
+			copy(n.prefix, d.prefix[len(comm):])
 			d.desc = n
 			d.prefix = comm
 			d.value = value
@@ -90,14 +91,16 @@ func (r *radNode) insert(key string, value interface{}) error {
 			return d.insert(key[len(comm):], value)
 		}
 		p := &radNode{
-			prefix: d.prefix[len(comm):],
+			prefix: make([]rune, len(d.prefix)-len(comm)),
 			value:  d.value,
 			desc:   d.desc,
 		}
+		copy(p.prefix, d.prefix[len(comm):])
 		n := &radNode{
-			prefix: key[len(comm):],
+			prefix: make([]rune, len(key)-len(comm)),
 			value:  value,
 		}
+		copy(n.prefix, key[len(comm):])
 		d.prefix = comm
 		p.sis = n
 		d.desc = p
@@ -105,10 +108,11 @@ func (r *radNode) insert(key string, value interface{}) error {
 		return nil
 	}
 	n := &radNode{
-		prefix: key,
+		prefix: make([]rune, len(key)),
 		value:  value,
 		sis:    r.desc,
 	}
+	copy(n.prefix, key)
 	r.desc = n
 	return nil
 }
@@ -117,7 +121,7 @@ func (r *radNode) insert(key string, value interface{}) error {
 func (rad *Radix) Lookup(key string) interface{} {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
-	if x, ok := rad.root.lookup(key); ok {
+	if x, ok := rad.root.lookup([]rune(key)); ok {
 		return x.value
 	}
 	return nil
@@ -128,7 +132,7 @@ func (rad *Radix) Prefix(prefix string) *list.List {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
 	l := list.New()
-	n, _ := rad.root.lookup(prefix)
+	n, _ := rad.root.lookup([]rune(prefix))
 	if n == nil {
 		return l
 	}
@@ -147,7 +151,7 @@ func (r *radNode) addToList(l *list.List) {
 }
 
 // implementats lookup
-func (r *radNode) lookup(key string) (*radNode, bool) {
+func (r *radNode) lookup(key []rune) (*radNode, bool) {
 	for d := r.desc; d != nil; d = d.sis {
 		comm := common(key, d.prefix)
 		if len(comm) == 0 {
@@ -166,14 +170,14 @@ func (r *radNode) lookup(key string) (*radNode, bool) {
 }
 
 // return the common string
-func common(s, o string) string {
+func common(s, o []rune) []rune {
 	max, min := s, o
 	if len(max) < len(min) {
 		max, min = min, max
 	}
 	var str []rune
 	for i, r := range min {
-		if r != rune(max[i]) {
+		if r != max[i] {
 			break
 		}
 		if str == nil {
@@ -182,5 +186,5 @@ func common(s, o string) string {
 			str = append(str, r)
 		}
 	}
-	return string(str)
+	return str
 }
