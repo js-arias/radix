@@ -36,6 +36,13 @@ Return all elements that has key as its prefix.
     
 Removes an element from the radix, and returns it.
 
+The radix can be navigated using an iterator that scan the radix
+in alphabetical order:
+
+    for it := r.Iterator(); it != nil; it.Next() {
+        // do something with it.Value or it.Key
+    }
+
 Authorship and license
 ----------------------
 

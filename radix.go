@@ -21,9 +21,9 @@ type Radix struct {
 
 // a node of a radix tree
 type radNode struct {
-	prefix    []rune      // current prefix of the node
-	desc, sis *radNode    // neighbors of the node
-	value     interface{} // stored value
+	prefix         []rune      // current prefix of the node
+	desc, sis, par *radNode    // neighbors of the node
+	value          interface{} // stored value
 }
 
 // New returns a new, empty radix tree.
@@ -61,6 +61,8 @@ func (rad *Radix) Insert(key string, value interface{}) error {
 	return rad.root.insert([]rune(key), value)
 }
 
+// BUG(jsa): Insert does not add childs alphabetically
+
 // implements insert
 func (r *radNode) insert(key []rune, value interface{}) error {
 	for d := r.desc; d != nil; d = d.sis {
@@ -80,9 +82,11 @@ func (r *radNode) insert(key []rune, value interface{}) error {
 				prefix: make([]rune, len(d.prefix)-len(comm)),
 				value:  d.value,
 				desc:   d.desc,
+				par:    d,
 			}
 			copy(n.prefix, d.prefix[len(comm):])
 			d.desc = n
+			n.SetParOnDesc()
 			d.prefix = comm
 			d.value = value
 			return nil
@@ -94,16 +98,19 @@ func (r *radNode) insert(key []rune, value interface{}) error {
 			prefix: make([]rune, len(d.prefix)-len(comm)),
 			value:  d.value,
 			desc:   d.desc,
+			par:    d,
 		}
 		copy(p.prefix, d.prefix[len(comm):])
 		n := &radNode{
 			prefix: make([]rune, len(key)-len(comm)),
 			value:  value,
+			par:    d,
 		}
 		copy(n.prefix, key[len(comm):])
 		d.prefix = comm
 		p.sis = n
 		d.desc = p
+		p.SetParOnDesc()
 		d.value = nil
 		return nil
 	}
@@ -111,10 +118,18 @@ func (r *radNode) insert(key []rune, value interface{}) error {
 		prefix: make([]rune, len(key)),
 		value:  value,
 		sis:    r.desc,
+		par:    r,
 	}
 	copy(n.prefix, key)
 	r.desc = n
 	return nil
+}
+
+// set parent on descendans
+func (r *radNode) SetParOnDesc() {
+	for x := r.desc; x != nil; x = x.sis {
+		x.par = r
+	}
 }
 
 // Lookup searches for a particular string in the tree.
@@ -187,4 +202,154 @@ func common(s, o []rune) []rune {
 		}
 	}
 	return str
+}
+
+// Iterator is an iterator of a Radix Tree
+type Iterator struct {
+	r *radNode
+
+	// Key of the element
+	Key string
+
+	// Value assigned to current element
+	Value interface{}
+}
+
+// NewIterator returns a new iterator for a given Radix tree. If the tree is
+// empty, a nil Iterator will be return.
+func (rad *Radix) Iterator() *Iterator {
+	if rad == nil {
+		return nil
+	}
+	r := rad.root.next()
+	if r.value == nil {
+		return nil
+	}
+	it := &Iterator{
+		r:     r,
+		Key:   string(r.getKey()),
+		Value: r.value,
+	}
+	return it
+}
+
+// Next retrieve the next valid iterator, if there are no more elements in the
+// radix, a nil iterator will be returned.
+func (it *Iterator) Next() *Iterator {
+	if it == nil {
+		return nil
+	}
+	r := it.r.next()
+	if r == nil {
+		return nil
+	}
+	nx := &Iterator{
+		r:     r,
+		Key:   r.getKey(),
+		Value: r.value,
+	}
+	return nx
+}
+
+// next returns the next valid radix node
+func (r *radNode) next() *radNode {
+
+	println("node:", string(r.prefix), "value:", r.value)
+
+	if n := r.getFirst(); n != nil {
+		if n.value != nil {
+			return n
+		}
+		return n.next()
+	}
+	o := r
+	for p := r; p != nil; p = p.par {
+		if d := o.getNextSis(); d != nil {
+			if d.value != nil {
+				return d
+			}
+			return d.next()
+		}
+		o = p
+	}
+	return nil
+}
+
+// getKey returns the associated key of a radNode
+func (r *radNode) getKey() string {
+	key := make([]rune, len(r.prefix))
+	copy(key, r.prefix)
+	for p := r.par; p != nil; p = p.par {
+		k := make([]rune, len(p.prefix))
+		copy(k, p.prefix)
+		k = append(k, key...)
+		key = k
+	}
+	return string(key)
+}
+
+// getFirst scans the current radix level to select the first alphabetical
+// element.
+func (r *radNode) getFirst() *radNode {
+	n := r.desc
+	if n == nil {
+		return nil
+	}
+	if n.sis == nil {
+		return n
+	}
+	key := string(n.prefix)
+	for d := n.sis; d != nil; d = d.sis {
+		k := string(d.prefix)
+		if k < key {
+			n = d
+			key = k
+		}
+	}
+	return n
+}
+
+// getNextSis scans the current radix level to select the next alphabetical
+// element.
+func (r *radNode) getNextSis() *radNode {
+	if r.par == nil {
+		return nil
+	}
+	minKey := string(r.prefix)
+	n := r.par.getLast()
+	maxKey := string(n.prefix)
+	if n == r {
+		return nil
+	}
+	for d := r.par.desc; d != nil; d = d.sis {
+		k := string(d.prefix)
+		if k > minKey {
+			if k < maxKey {
+				n = d
+				maxKey = k
+			}
+		}
+	}
+	return n
+}
+
+// getLast scans the current radix level to select the last alphabetical
+// element.
+func (r *radNode) getLast() *radNode {
+	n := r.desc
+	if n == nil {
+		return nil
+	}
+	if n.sis == nil {
+		return n
+	}
+	key := string(n.prefix)
+	for d := n.sis; d != nil; d = d.sis {
+		k := string(d.prefix)
+		if k > key {
+			n = d
+			key = k
+		}
+	}
+	return n
 }

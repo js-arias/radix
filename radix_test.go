@@ -352,3 +352,40 @@ func TestPrefix(t *testing.T) {
 		t.Errorf("unexpected element in list %s", v)
 	}
 }
+
+func TestIterator(t *testing.T) {
+	sl := []string{
+		"test",
+		"slow",
+		"water",
+		"slower",
+		"tester",
+		"team",
+		"toast",
+		"timor",
+		"te",
+		"a",
+		"aa",
+		"aaaaaaa",
+		"aaaa",
+	}
+	r := New()
+	for _, s := range sl {
+		r.Insert(s, s)
+	}
+	it := r.Iterator()
+	if it == nil {
+		t.Errorf("nil iterator")
+	}
+	i := 0
+	prev := it.Value.(string)
+	for ; it != nil; it = it.Next() {
+		if it.Value.(string) < prev {
+			t.Errorf("iterator withour alphabetical order")
+		}
+		i++
+	}
+	if i != len(sl) {
+		t.Errorf("iterator fail to navigate the radix, expecting %d found %d", len(sl), i)
+	}
+}
