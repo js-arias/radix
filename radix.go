@@ -86,7 +86,7 @@ func (r *radNode) insert(key []rune, value interface{}) error {
 			}
 			copy(n.prefix, d.prefix[len(comm):])
 			d.desc = n
-			n.SetParOnDesc()
+			n.setParOnDesc()
 			d.prefix = comm
 			d.value = value
 			return nil
@@ -110,7 +110,7 @@ func (r *radNode) insert(key []rune, value interface{}) error {
 		d.prefix = comm
 		p.sis = n
 		d.desc = p
-		p.SetParOnDesc()
+		p.setParOnDesc()
 		d.value = nil
 		return nil
 	}
@@ -126,7 +126,7 @@ func (r *radNode) insert(key []rune, value interface{}) error {
 }
 
 // set parent on descendans
-func (r *radNode) SetParOnDesc() {
+func (r *radNode) setParOnDesc() {
 	for x := r.desc; x != nil; x = x.sis {
 		x.par = r
 	}
@@ -204,7 +204,27 @@ func common(s, o []rune) []rune {
 	return str
 }
 
-// Iterator is an iterator of a Radix Tree
+// Set sets a value in a key already in use. If the key does not exist, then
+// inserts the new key and value.
+func (rad *Radix) Set(key string, value interface{}) error {
+	rad.lock.Lock()
+	defer rad.lock.Unlock()
+	k := []rune(key)
+	if x, ok := rad.root.lookup(k); ok {
+		x.value = value
+	} else {
+		return rad.root.insert(k, value)
+	}
+	return nil
+}
+
+// Iterator is an iterator of a Radix Tree.
+//
+// It is useful for navigating the radix in alphabetical order:
+//
+//    for it := r.Iterator(); it != nil; it.Next() {
+//        // do something with it.Value or it.Key
+//    }
 type Iterator struct {
 	r *radNode
 
@@ -215,7 +235,7 @@ type Iterator struct {
 	Value interface{}
 }
 
-// NewIterator returns a new iterator for a given Radix tree. If the tree is
+// Iterator returns a new iterator for a given Radix tree. If the tree is
 // empty, a nil Iterator will be return.
 func (rad *Radix) Iterator() *Iterator {
 	if rad == nil {
@@ -253,9 +273,6 @@ func (it *Iterator) Next() *Iterator {
 
 // next returns the next valid radix node
 func (r *radNode) next() *radNode {
-
-	println("node:", string(r.prefix), "value:", r.value)
-
 	if n := r.getFirst(); n != nil {
 		if n.value != nil {
 			return n

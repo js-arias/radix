@@ -6,6 +6,8 @@ Package radix implement a
 expected that the keys are in UTF-8 (i.e. go runes), and that
 insertion and lookup is far more common than deletion.
 
+Use godoc tool to have a full documentation of the package.
+
 
 Quick usage
 -----------
@@ -23,6 +25,12 @@ The implementation of radix is private. To access data use:
     
 Insert a value in the radix. It returns an error if the key is already
 in use.
+
+    func (r *Radix) Set(key string, value interface{}) error
+
+Set provides a more flexible way to add data to the radix, as it reset
+a value if the key is already in use, or creates a new key if it is not
+already in the radix (as Insert).
 
     func (r *Radix) Lookup(key string) interface{}
     

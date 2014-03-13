@@ -216,7 +216,7 @@ func TestLookup(t *testing.T) {
 			}
 		}
 	} else {
-		t.Errorf("expecting %s found nil", "tester")
+		t.Errorf("expecting %s found nil", "slow")
 	}
 	if v := r.Lookup("water"); v != nil {
 		if s, ok := v.(string); !ok {
@@ -227,7 +227,7 @@ func TestLookup(t *testing.T) {
 			}
 		}
 	} else {
-		t.Errorf("expecting %s found nil", "tester")
+		t.Errorf("expecting %s found nil", "water")
 	}
 	if v := r.Lookup("waterloo"); v != nil {
 		t.Errorf("expecting nil found %v", v)
@@ -241,7 +241,7 @@ func TestLookup(t *testing.T) {
 			}
 		}
 	} else {
-		t.Errorf("expecting %s found nil", "tester")
+		t.Errorf("expecting %s found nil", "team")
 	}
 }
 
@@ -350,6 +350,54 @@ func TestPrefix(t *testing.T) {
 	}
 	if v := l.Front().Value.(string); v != "slower" {
 		t.Errorf("unexpected element in list %s", v)
+	}
+}
+
+func TestSet(t *testing.T) {
+	sl := []string{
+		"test",
+		"slow",
+		"water",
+		"slower",
+		"tester",
+		"team",
+		"toast",
+		"timor",
+		"te",
+		"a",
+		"aa",
+		"aaaaaaa",
+		"aaaa",
+	}
+	r := New()
+	for _, s := range sl {
+		r.Set(s, s)
+	}
+	for _, s := range sl[3:6] {
+		r.Set(s, s+s)
+	}
+
+	if v := r.Lookup("slow"); v != nil {
+		if s, ok := v.(string); !ok {
+			t.Errorf("expecting %s found nil", "slow")
+		} else {
+			if s != "slow" {
+				t.Errorf("expecting %s found %s", "slow", s)
+			}
+		}
+	} else {
+		t.Errorf("expecting %s found nil", "slow")
+	}
+	if v := r.Lookup("tester"); v != nil {
+		if s, ok := v.(string); !ok {
+			t.Errorf("expecting %s found nil", "testertester")
+		} else {
+			if s != "testertester" {
+				t.Errorf("expecting %s found %s", "testertester", s)
+			}
+		}
+	} else {
+		t.Errorf("expecting %s found nil", "testertester")
 	}
 }
 
