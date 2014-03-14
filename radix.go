@@ -19,7 +19,7 @@ type Radix struct {
 	lock sync.Mutex // protect the radix
 }
 
-// a node of a radix tree
+// a node of a radix tree.
 type radNode struct {
 	prefix         []rune      // current prefix of the node
 	desc, sis, par *radNode    // neighbors of the node
@@ -41,7 +41,7 @@ func (rad *Radix) Delete(key string) interface{} {
 	return rad.root.delete([]rune(key))
 }
 
-// implements delete
+// implements delete.
 func (r *radNode) delete(key []rune) interface{} {
 	if x, ok := r.lookup(key); ok {
 		val := x.value
@@ -57,13 +57,14 @@ func (r *radNode) delete(key []rune) interface{} {
 // is already in use.
 func (rad *Radix) Insert(key string, value interface{}) error {
 	rad.lock.Lock()
+	if value == nil {
+		return errors.New("undefined value")
+	}
 	defer rad.lock.Unlock()
 	return rad.root.insert([]rune(key), value)
 }
 
-// BUG(jsa): Insert does not add childs alphabetically
-
-// implements insert
+// implements insert.
 func (r *radNode) insert(key []rune, value interface{}) error {
 	for d := r.desc; d != nil; d = d.sis {
 		comm := common(key, d.prefix)
@@ -125,7 +126,7 @@ func (r *radNode) insert(key []rune, value interface{}) error {
 	return nil
 }
 
-// set parent on descendans
+// set parent on descendans.
 func (r *radNode) setParOnDesc() {
 	for x := r.desc; x != nil; x = x.sis {
 		x.par = r
@@ -155,7 +156,7 @@ func (rad *Radix) Prefix(prefix string) *list.List {
 	return l
 }
 
-// add the content of a node and its descendants to a list
+// add the content of a node and its descendants to a list.
 func (r *radNode) addToList(l *list.List) {
 	if r.value != nil {
 		l.PushBack(r.value)
@@ -165,7 +166,7 @@ func (r *radNode) addToList(l *list.List) {
 	}
 }
 
-// implementats lookup
+// implementats lookup.
 func (r *radNode) lookup(key []rune) (*radNode, bool) {
 	for d := r.desc; d != nil; d = d.sis {
 		comm := common(key, d.prefix)
@@ -184,7 +185,7 @@ func (r *radNode) lookup(key []rune) (*radNode, bool) {
 	return nil, false
 }
 
-// return the common string
+// return the common string.
 func common(s, o []rune) []rune {
 	max, min := s, o
 	if len(max) < len(min) {
@@ -209,6 +210,9 @@ func common(s, o []rune) []rune {
 func (rad *Radix) Set(key string, value interface{}) error {
 	rad.lock.Lock()
 	defer rad.lock.Unlock()
+	if value == nil {
+		return errors.New("undefined value")
+	}
 	k := []rune(key)
 	if x, ok := rad.root.lookup(k); ok {
 		x.value = value
@@ -271,7 +275,7 @@ func (it *Iterator) Next() *Iterator {
 	return nx
 }
 
-// next returns the next valid radix node
+// next returns the next valid radix node.
 func (r *radNode) next() *radNode {
 	if n := r.getFirst(); n != nil {
 		if n.value != nil {
@@ -292,7 +296,7 @@ func (r *radNode) next() *radNode {
 	return nil
 }
 
-// getKey returns the associated key of a radNode
+// getKey returns the associated key of a radNode.
 func (r *radNode) getKey() string {
 	key := make([]rune, len(r.prefix))
 	copy(key, r.prefix)
